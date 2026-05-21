@@ -134,12 +134,7 @@ public:
         if (!a_event) return RE::BSEventNotifyControl::kContinue;
 
         std::string_view eventName = a_event->eventName.c_str();
-        if (eventName == "STM_Open" && a_event->strArg.c_str()) {
-            auto msgQueue = RE::UIMessageQueue::GetSingleton();
-            if (msgQueue) {
-                // 2. Envia o comando para esconder (kHide) o JournalMenu
-                msgQueue->AddMessage(RE::JournalMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
-            }
+        if (eventName == "STM_Open") {
 			Prisma::Show();
             return RE::BSEventNotifyControl::kContinue;
         }

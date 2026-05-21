@@ -32,6 +32,7 @@ struct TrackerRule {
     std::string name;
     std::string description;
     std::string category = "General";
+    std::string graphVarName;
 };
 
 namespace StatsTracker {
@@ -45,7 +46,7 @@ namespace StatsTracker {
 
     // Settings (Quais estão ativos e as categorias)
     struct StatSettings {
-        std::string category = "General";
+        std::string category = "";
         bool isActive = true;
     };
     inline std::map<std::string, StatSettings> UIOptions;

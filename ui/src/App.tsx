@@ -10,9 +10,9 @@ interface TrackedStat {
     isCustomRule: boolean;
     isActive: boolean;
     category: string;
+    categoryRaw?: string;
 }
 
-// Dicionário base fixo para organizar os itens Vanilla nativos
 const defaultVanillaCategories: Record<string, string> = {
     "Locations Discovered": "General", "Dungeons Cleared": "General", "Days Passed": "General",
     "Hours Slept": "General", "Hours Waiting": "General", "Standing Stones Found": "General",
@@ -64,42 +64,101 @@ const defaultVanillaCategories: Record<string, string> = {
 
 function App() {
     const [stats, setStats] = createSignal<TrackedStat[]>([]);
-    const [activeTab, setActiveTab] = createSignal<string>('General');
+    const [activeTab, setActiveTab] = createSignal<string>('All');
     const [search, setSearch] = createSignal("");
-    // Lista de Categorias Dinâmicas
     const [categoriesList, setCategoriesList] = createSignal<string[]>(["General", "Combat", "Magic", "Crime", "Bounties", "Crafting", "Shouts", "Quests", "DLC"]);
     const [newCatName, setNewCatName] = createSignal("");
+
+    // Dicionário Dinâmico reativo alimentado via C++
+    const [translations, setTranslations] = createSignal<Record<string, string>>({});
+
+    // Sistema Macro de Tradução e Fallback
+    const t = (key: string, fallback: string = "") => translations()[key] || fallback;
+
+    const localizeCategory = (cat: string) => {
+        if (!cat) return "";
+        if (cat === "All") return t("ui.all_categories", "All Categories");
+
+        // 1. Tenta correspondência direta (se a chave do cache for exatamente o token bruto enviado)
+        if (translations()[cat]) return translations()[cat];
+
+        // 2. Limpa sintaxes de interpolação como {{$key}} ou $key para buscar no cache de idiomas
+        const cleanKey = cat.replace(/[\{\}\$]/g, "").trim();
+        if (translations()[cleanKey]) return translations()[cleanKey];
+
+        // 3. Fallback clássico para as chaves nativas/vanilla
+        const vanillaKey = `categories.${cat}`;
+        if (translations()[vanillaKey]) return translations()[vanillaKey];
+
+        return cat;
+    };
+
+    // CORREÇÃO: Protege apenas as chaves nativas essenciais do Vanilla Skyrim.
+    // Categorias customizadas ou tokens de tradução agora estão liberados para renomear/deletar.
+    const isSystemCategory = (cat: string) => {
+        const defaultKeys = ["General", "Combat", "Magic", "Crime", "Bounties", "Crafting", "Shouts", "Quests", "DLC"];
+        return defaultKeys.includes(cat);
+    };
+
     const [isMainCatOpen, setIsMainCatOpen] = createSignal(false);
-    // Modais e Filtros internos da Janela de Edição
     const [isSettingsOpen, setIsSettingsOpen] = createSignal(false);
+    const [isSettingsCatOpen, setIsSettingsCatOpen] = createSignal(false);
+    const [isSettingsVisOpen, setIsSettingsVisOpen] = createSignal(false);
+    const [openRowDropdownId, setOpenRowDropdownId] = createSignal<string | null>(null);
+
     const [settingsSearch, setSettingsSearch] = createSignal("");
     const [settingsCatFilter, setSettingsCatFilter] = createSignal("All");
     const [settingsVisFilter, setSettingsVisFilter] = createSignal("All");
 
-    // Sistema de Tooltip dinâmico baseado em posição
     const [showTooltips, setShowTooltips] = createSignal(true);
     const [hoveredDesc, setHoveredDesc] = createSignal<string | null>(null);
     const [mousePos, setMousePos] = createSignal({ x: 0, y: 0 });
 
-    const updateStatSetting = (id: string, isActive: boolean, category: string) => {
-        if (typeof (window as any).UpdateStatUISettings === 'function') {
-            (window as any).UpdateStatUISettings(JSON.stringify({ id, isActive, category }));
-        }
-    };
+    const [sortBy, setSortBy] = createSignal<'category' | 'name' | 'value'>('name');
+    const [sortDirection, setSortDirection] = createSignal<'asc' | 'desc'>('asc');
 
     onMount(() => {
         const handleStatsReceived = (e: any) => {
-            const incoming: TrackedStat[] = e.detail;
+            const { stats: incoming, customCategories, localization } = e.detail;
 
-            const processed = incoming.map(stat => {
-                if (!stat.isCustomRule && defaultVanillaCategories[stat.id]) {
-                    stat.category = defaultVanillaCategories[stat.id];
+            // Define e atualiza as traduções recebidas dinamicamente do JSON
+            if (localization) {
+                setTranslations(localization);
+            }
+
+            const defaultKeys = ["General", "Combat", "Magic", "Crime", "Bounties", "Crafting", "Shouts", "Quests", "DLC"];
+            let baseCats = [...defaultKeys];
+
+            if (Array.isArray(customCategories) && customCategories.length > 0) {
+                baseCats = customCategories;
+            }
+
+            const categoryRenameMap: Record<string, string> = {};
+            defaultKeys.forEach((originalKey, index) => {
+                if (baseCats[index]) {
+                    categoryRenameMap[originalKey] = baseCats[index];
                 }
+            });
+
+            const processed = incoming.map((stat: TrackedStat) => {
+                if (!stat.isCustomRule && defaultVanillaCategories[stat.id]) {
+                    if (!stat.category || stat.category.trim() === "") {
+                        stat.category = defaultVanillaCategories[stat.id];
+                    }
+                }
+                if (!stat.category || stat.category.trim() === "") {
+                    stat.category = "General";
+                }
+
+                if (categoryRenameMap[stat.category]) {
+                    stat.category = categoryRenameMap[stat.category];
+                }
+
+                stat.categoryRaw = stat.category;
                 return stat;
             });
 
-            // Une as categorias fixas com quaisquer categorias criadas dinamicamente
-            const runtimeCats = new Set([...categoriesList(), ...processed.map(s => s.category)]);
+            const runtimeCats = new Set([...baseCats, ...processed.map((s: TrackedStat) => s.category)]);
             setCategoriesList(Array.from(runtimeCats));
             setStats(processed);
         };
@@ -114,6 +173,9 @@ function App() {
 
         const handleGlobalClick = () => {
             setIsMainCatOpen(false);
+            setIsSettingsCatOpen(false);
+            setIsSettingsVisOpen(false);
+            setOpenRowDropdownId(null);
         };
         window.addEventListener('click', handleGlobalClick);
 
@@ -128,6 +190,29 @@ function App() {
         });
     });
 
+    const saveAllChangesAndClose = () => {
+        const payload: any[] = [];
+        payload.push({
+            id: "__CustomCategories__",
+            isActive: true,
+            category: JSON.stringify(categoriesList())
+        });
+
+        stats().forEach(stat => {
+            const currentCat = stat.categoryRaw || stat.category;
+            payload.push({
+                id: stat.id,
+                isActive: stat.isActive,
+                category: currentCat
+            });
+        });
+
+        if (typeof (window as any).UpdateStatUISettings === 'function') {
+            (window as any).UpdateStatUISettings(JSON.stringify(payload));
+        }
+        setIsSettingsOpen(false);
+    };
+
     const addCategory = () => {
         const name = newCatName().trim();
         if (name && !categoriesList().includes(name)) {
@@ -137,12 +222,12 @@ function App() {
     };
 
     const deleteCategory = (catToDelete: string) => {
-        if (catToDelete === "General") return;
+        if (isSystemCategory(catToDelete)) return;
         setCategoriesList(categoriesList().filter(c => c !== catToDelete));
         setStats(prev => prev.map(s => {
-            if (s.category === catToDelete) {
-                updateStatSetting(s.id, s.isActive, "General");
-                return { ...s, category: "General" };
+            const currentCat = s.categoryRaw || s.category;
+            if (currentCat === catToDelete) {
+                return { ...s, category: "General", categoryRaw: "General" };
             }
             return s;
         }));
@@ -151,24 +236,40 @@ function App() {
 
     const renameCategory = (oldName: string, newName: string) => {
         const trimmed = newName.trim();
-        if (!trimmed || oldName === "General" || categoriesList().includes(trimmed)) return;
+        if (!trimmed || oldName === trimmed || isSystemCategory(oldName) || categoriesList().includes(trimmed)) return;
+
         setCategoriesList(categoriesList().map(c => c === oldName ? trimmed : c));
         setStats(prev => prev.map(s => {
-            if (s.category === oldName) {
-                updateStatSetting(s.id, s.isActive, trimmed);
-                return { ...s, category: trimmed };
+            const currentCat = s.categoryRaw || s.category;
+            if (currentCat === oldName) {
+                return { ...s, category: trimmed, categoryRaw: trimmed };
             }
             return s;
         }));
         if (activeTab() === oldName) setActiveTab(trimmed);
     };
 
+    const handleSort = (field: 'category' | 'name' | 'value') => {
+        if (sortBy() === field) {
+            setSortDirection(sortDirection() === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(field);
+            setSortDirection('asc');
+        }
+    };
+
     const visibleStats = () => {
-        return stats().filter(s =>
-            s.isActive &&
-            s.category === activeTab() &&
-            s.name.toLowerCase().includes(search().toLowerCase())
-        );
+        let filtered = stats().filter(s => s.isActive && s.name.toLowerCase().includes(search().toLowerCase()));
+        if (activeTab() !== "All") {
+            filtered = filtered.filter(s => s.category === activeTab());
+        }
+        return [...filtered].sort((a, b) => {
+            let valA: any = sortBy() === 'value' ? a.value : localizeCategory(sortBy() === 'category' ? a.category : a.name).toLowerCase();
+            let valB: any = sortBy() === 'value' ? b.value : localizeCategory(sortBy() === 'category' ? b.category : b.name).toLowerCase();
+            if (valA < valB) return sortDirection() === 'asc' ? -1 : 1;
+            if (valA > valB) return sortDirection() === 'asc' ? 1 : -1;
+            return 0;
+        });
     };
 
     const settingsFilteredStats = () => {
@@ -181,97 +282,121 @@ function App() {
     };
 
     const toggleStatVisibility = (id: string) => {
-        setStats(prev => prev.map(s => {
-            if (s.id === id) {
-                const newState = !s.isActive;
-                updateStatSetting(id, newState, s.category);
-                return { ...s, isActive: newState };
-            }
-            return s;
-        }));
+        setStats(prev => prev.map(s => (s.id === id ? { ...s, isActive: !s.isActive } : s)));
     };
 
     const changeStatCategory = (id: string, newCat: string) => {
-        setStats(prev => prev.map(s => {
-            if (s.id === id) {
-                updateStatSetting(id, s.isActive, newCat);
-                return { ...s, category: newCat };
-            }
-            return s;
-        }));
+        const validatedCat = (!newCat || newCat.trim() === "") ? "General" : newCat;
+        setStats(prev => prev.map(s => (s.id === id ? { ...s, category: validatedCat, categoryRaw: validatedCat } : s)));
     };
 
     return (
         <div class="skyrim-viewport">
             <div class="bg-gradient"></div>
 
-            {/* PAINEL PRINCIPAL DE EXIBIÇÃO */}
             <div class="tracker-main-panel">
-
-                {/* BARRA DE FILTRO UNIFICADA NA MESMA LINHA */}
-                <div class="tracker-filter-bar">
-                    {/* Filtro por Categoria via Dropdown Customizado Div/Button */}
-                    <div class="skyrim-custom-dropdown-container">
-                        <button
-                            class="skyrim-custom-dropdown-trigger"
-                            onClick={(e) => { e.stopPropagation(); setIsMainCatOpen(!isMainCatOpen()); }}
-                        >
-                            {activeTab()}
-                        </button>
-                        <Show when={isMainCatOpen()}>
-                            <div class="skyrim-custom-dropdown-options">
-                                <For each={categoriesList()}>
-                                    {(cat) => (
-                                        <div
-                                            class={`skyrim-custom-dropdown-option ${activeTab() === cat ? 'selected' : ''}`}
-                                            onClick={() => { setActiveTab(cat); setSearch(""); setHoveredDesc(null); setIsMainCatOpen(false); }}
-                                        >
-                                            {cat}
-                                        </div>
-                                    )}
-                                </For>
-                            </div>
-                        </Show>
+                <div class="skyrim-top-navigation">
+                    <div class="nav-navigation-box">
+                        <img src="/Assets/Side.svg" class="skyrim-nav-side left" alt="" />
+                        <img src="/Assets/Side.svg" class="skyrim-nav-side right" alt="" />
+                        <div class="nav-tabs-holder">
+                            <button class="skyrim-big-tab">{t("ui.tab_quests", "Quests")}</button>
+                            <button class="skyrim-big-tab active">
+                                <span class="tab-bracket">◁</span> {t("ui.tab_stats_tracker", "Stats Tracker")} <span class="tab-bracket">▷</span>
+                            </button>
+                            <button class="skyrim-big-tab">{t("ui.tab_system", "System")}</button>
+                        </div>
                     </div>
-
-                    {/* Filtro por Texto Customizado */}
-                    <input
-                        type="text"
-                        class="skyrim-search-input main-search-input"
-                        placeholder="Filter stats by name..."
-                        value={search()}
-                        onInput={(e) => setSearch(e.currentTarget.value)}
-                    />
-
-                    {/* Botão de Settings */}
-                    <button class="key-button settings-btn" onClick={() => setIsSettingsOpen(true)}>
-                        ⚙️ SETTINGS
-                    </button>
                 </div>
 
-                {/* Lista de Atributos */}
-                <div class="stat-list-container">
-                    <Show when={visibleStats().length > 0} fallback={<div class="no-stats-fallback">No tracked statistics in this category.</div>}>
-                        <For each={visibleStats()}>
-                            {(stat) => (
-                                <div
-                                    class="stat-list-item"
-                                    onMouseEnter={(e) => { if (showTooltips()) setHoveredDesc(stat.desc); }}
-                                    onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
-                                    onMouseLeave={() => setHoveredDesc(null)}
-                                >
-                                    <span class="stat-name">{stat.name}</span>
-                                    <span class="stat-value">
-                                        {stat.value % 1 !== 0 ? stat.value.toFixed(2) : stat.value.toLocaleString()}
-                                    </span>
+                <div class="tracker-content-box">
+                    <img src="/Assets/Side.svg" class="skyrim-frame-corner tl" alt="" />
+                    <img src="/Assets/Side.svg" class="skyrim-frame-corner tr" alt="" />
+                    <img src="/Assets/Side.svg" class="skyrim-frame-corner bl" alt="" />
+                    <img src="/Assets/Side.svg" class="skyrim-frame-corner br" alt="" />
+
+                    <div class="tracker-filter-bar">
+                        <div class="skyrim-custom-dropdown-container">
+                            <button
+                                class="skyrim-custom-dropdown-trigger"
+                                onClick={(e) => { e.stopPropagation(); setIsMainCatOpen(!isMainCatOpen()); }}
+                            >
+                                {localizeCategory(activeTab())}
+                            </button>
+                            <Show when={isMainCatOpen()}>
+                                <div class="skyrim-custom-dropdown-options">
+                                    <div
+                                        class={`skyrim-custom-dropdown-option ${activeTab() === 'All' ? 'selected' : ''}`}
+                                        onClick={() => { setActiveTab('All'); setSearch(""); setHoveredDesc(null); setIsMainCatOpen(false); }}
+                                    >
+                                        {t("ui.all_categories", "All Categories")}
+                                    </div>
+                                    <For each={categoriesList()}>
+                                        {(cat) => (
+                                            <div
+                                                class={`skyrim-custom-dropdown-option ${activeTab() === cat ? 'selected' : ''}`}
+                                                onClick={() => { setActiveTab(cat); setSearch(""); setHoveredDesc(null); setIsMainCatOpen(false); }}
+                                            >
+                                                {localizeCategory(cat)}
+                                            </div>
+                                        )}
+                                    </For>
                                 </div>
-                            )}
-                        </For>
-                    </Show>
+                            </Show>
+                        </div>
+
+                        <input
+                            type="text"
+                            class="skyrim-search-input main-search-input"
+                            placeholder={t("ui.search_placeholder", "Filter statistics...")}
+                            value={search()}
+                            onInput={(e) => setSearch(e.currentTarget.value)}
+                        />
+
+                        <button class="key-button settings-btn" onClick={() => setIsSettingsOpen(true)}>
+                            {t("ui.settings_btn", "⚙️ SETTINGS")}
+                        </button>
+                    </div>
+
+                    <div class="stat-table-header">
+                        <span class={`stat-header-cell sortable ${sortBy() === 'category' ? 'active-sort' : ''}`} onClick={() => handleSort('category')}>
+                            {t("ui.header_category", "Category")} {sortBy() === 'category' ? (sortDirection() === 'asc' ? ' ▲' : ' ▼') : ''}
+                        </span>
+                        <span class={`stat-header-cell sortable ${sortBy() === 'name' ? 'active-sort' : ''}`} onClick={() => handleSort('name')}>
+                            {t("ui.header_name", "Statistic Name")} {sortBy() === 'name' ? (sortDirection() === 'asc' ? ' ▲' : ' ▼') : ''}
+                        </span>
+                        <span class={`stat-header-cell sortable text-right ${sortBy() === 'value' ? 'active-sort' : ''}`} onClick={() => handleSort('value')}>
+                            {t("ui.header_value", "Value")} {sortBy() === 'value' ? (sortDirection() === 'asc' ? ' ▲' : ' ▼') : ''}
+                        </span>
+                    </div>
+
+                    <div class="stat-list-container">
+                        <Show when={visibleStats().length > 0} fallback={<div class="no-stats-fallback">{t("ui.no_stats", "No tracked statistics found.")}</div>}>
+                            <For each={visibleStats()}>
+                                {(stat) => (
+                                    <div
+                                        class="stat-list-item"
+                                        onMouseEnter={() => { if (showTooltips()) setHoveredDesc(stat.desc); }}
+                                        onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
+                                        onMouseLeave={() => setHoveredDesc(null)}
+                                    >
+                                        <span class="stat-cell-category">
+                                            {localizeCategory(stat.category)}
+                                        </span>
+                                        <span class="stat-cell-name">
+                                            {stat.name}
+                                        </span>
+                                        <span class="stat-cell-value">
+                                            {stat.value % 1 !== 0 ? stat.value.toFixed(2) : stat.value.toLocaleString()}
+                                        </span>
+                                    </div>
+                                )}
+                            </For>
+                        </Show>
+                    </div>
                 </div>
             </div>
 
-            {/* TOOLTIP DINÂMICO QUE SEGUE O MOUSE */}
             <Show when={showTooltips() && hoveredDesc()}>
                 <Portal mount={document.body}>
                     <div class="stat-hover-tooltip" style={{
@@ -286,48 +411,42 @@ function App() {
                 </Portal>
             </Show>
 
-            {/* JANELA DE CONFIGURAÇÃO INTERNA */}
             <Show when={isSettingsOpen()}>
                 <Portal mount={document.body}>
-                    <div class="sl-modal-overlay" onClick={() => setIsSettingsOpen(false)}>
+                    <div class="sl-modal-overlay" onClick={saveAllChangesAndClose}>
                         <div class="settings-modal-box" onClick={(e) => e.stopPropagation()}>
-                            <h2>TRACKED STATS CONFIGURATION</h2>
+                            <h2>{t("ui.modal_title", "TRACKED STATISTICS CONFIGURATION")}</h2>
 
-                            <div style={{ display: "flex", "align-items": "center", "gap": "10px", "margin-bottom": "15px", "background": "#1e1e1e", padding: "12px", border: "1px solid var(--skyrim-border)" }}>
-                                <span style={{ color: "#fff", "font-size": "16px" }}>Show Stat Descriptions on Hover:</span>
+                            <div class="settings-toggle-row">
+                                <span>{t("ui.show_descriptions", "Show Descriptions on Hover:")}</span>
                                 <div class="skyrim-checkbox" onClick={() => setShowTooltips(!showTooltips())}>
                                     {showTooltips() ? '■' : '□'}
                                 </div>
                             </div>
 
-                            {/* Gerenciador de Categorias Dinâmicas */}
-                            <div style={{ "background": "#121212", padding: "15px", "margin-bottom": "15px", border: "1px solid #383838" }}>
-                                <h4 style={{ margin: "0 0 10px 0", color: "var(--skyrim-highlight)" }}>CATEGORY MANAGER</h4>
-                                <div style={{ display: "flex", gap: "10px", "margin-bottom": "10px" }}>
+                            <div class="settings-category-manager-container">
+                                <h4 class="settings-section-title">{t("ui.category_manager", "CATEGORY MANAGER")}</h4>
+                                <div class="category-add-row">
                                     <input
-                                        type="text" class="skyrim-search-input" placeholder="New category name..."
+                                        type="text" class="skyrim-search-input" placeholder={t("ui.new_category_placeholder", "New category name...")}
                                         value={newCatName()} onInput={(e) => setNewCatName(e.currentTarget.value)}
-                                        style={{ flex: 1 }}
                                     />
-                                    <button class="sl-action-btn" style={{ margin: 0, padding: "5px 20px", "font-size": "14px", height: "37px" }} onClick={addCategory}>+ Add</button>
+                                    <button class="sl-action-btn" onClick={addCategory}>{t("ui.add_btn", "+ Add")}</button>
                                 </div>
-                                <div style={{ display: "grid", "grid-template-columns": "repeat(auto-fill, minmax(260px, 1fr))", gap: "8px", "max-height": "100px", "overflow-y": "auto" }}>
+                                <div class="category-manager-scroll-list">
                                     <For each={categoriesList()}>
                                         {(cat) => (
-                                            <div style={{ display: "flex", "align-items": "center", "justify-content": "space-between", background: "#1e1e1e", padding: "6px 10px", border: "1px solid #2d2d2d" }}>
+                                            <div class="category-manager-item">
                                                 <input
                                                     type="text"
-                                                    class="skyrim-search-input"
-                                                    value={cat}
-                                                    disabled={cat === "General"}
-                                                    style={{ border: "none", "font-size": "14px", padding: 0, color: cat === "General" ? "#555" : "#fff", background: "transparent" }}
+                                                    class="skyrim-search-input label-edit-input"
+                                                    value={localizeCategory(cat)}
+                                                    disabled={isSystemCategory(cat)}
+                                                    style={{ color: isSystemCategory(cat) ? "#444" : "#fff" }}
                                                     onChange={(e) => renameCategory(cat, e.currentTarget.value)}
                                                 />
-                                                <Show when={cat !== "General"}>
-                                                    <button
-                                                        style={{ background: "#7f1d1d", color: "white", border: "none", cursor: "pointer", padding: "4px 10px", "font-size": "11px", "font-weight": "bold", "border-radius": "2px" }}
-                                                        onClick={() => deleteCategory(cat)}
-                                                    >
+                                                <Show when={!isSystemCategory(cat)}>
+                                                    <button class="category-delete-inline-btn" onClick={() => deleteCategory(cat)}>
                                                         X
                                                     </button>
                                                 </Show>
@@ -339,46 +458,80 @@ function App() {
 
                             <div class="settings-filter-bar">
                                 <input
-                                    type="text" class="skyrim-search-input" placeholder="Search by name or ID..."
-                                    style={{ flex: 1, margin: 0 }}
+                                    type="text" class="skyrim-search-input settings-main-search" placeholder={t("ui.settings_search_placeholder", "Search by name or ID...")}
                                     value={settingsSearch()} onInput={(e) => setSettingsSearch(e.currentTarget.value)}
                                 />
-                                <div class="skyrim-select-wrapper">
-                                    <select class="skyrim-dropdown" value={settingsCatFilter()} onChange={(e) => setSettingsCatFilter(e.currentTarget.value)}>
-                                        <option value="All">All Categories</option>
-                                        <For each={categoriesList()}>{(cat) => <option value={cat}>{cat}</option>}</For>
-                                    </select>
+
+                                <div class="skyrim-custom-dropdown-container settings-dropdown-width">
+                                    <button class="skyrim-custom-dropdown-trigger" onClick={(e) => { e.stopPropagation(); setIsSettingsCatOpen(!isSettingsCatOpen()); setIsSettingsVisOpen(false); setOpenRowDropdownId(null); }}>
+                                        {settingsCatFilter() === "All" ? t("ui.all_categories", "All Categories") : localizeCategory(settingsCatFilter())}
+                                    </button>
+                                    <Show when={isSettingsCatOpen()}>
+                                        <div class="skyrim-custom-dropdown-options font-scale-fix">
+                                            <div class={`skyrim-custom-dropdown-option ${settingsCatFilter() === 'All' ? 'selected' : ''}`} onClick={() => { setSettingsCatFilter("All"); setIsSettingsCatOpen(false); }}>{t("ui.all_categories", "All Categories")}</div>
+                                            <For each={categoriesList()}>
+                                                {(cat) => <div class={`skyrim-custom-dropdown-option ${settingsCatFilter() === cat ? 'selected' : ''}`} onClick={() => { setSettingsCatFilter(cat); setIsSettingsCatOpen(false); }}>{localizeCategory(cat)}</div>}
+                                            </For>
+                                        </div>
+                                    </Show>
                                 </div>
-                                <div class="skyrim-select-wrapper">
-                                    <select class="skyrim-dropdown" value={settingsVisFilter()} onChange={(e) => setSettingsVisFilter(e.currentTarget.value)}>
-                                        <option value="All">All Visibility</option>
-                                        <option value="Visible">Visible Only</option>
-                                        <option value="Hidden">Hidden Only</option>
-                                    </select>
+
+                                <div class="skyrim-custom-dropdown-container settings-dropdown-width">
+                                    <button class="skyrim-custom-dropdown-trigger" onClick={(e) => { e.stopPropagation(); setIsSettingsVisOpen(!isSettingsVisOpen()); setIsSettingsCatOpen(false); setOpenRowDropdownId(null); }}>
+                                        {settingsVisFilter() === "All" ? t("ui.all_visibility", "All Visibility") : settingsVisFilter() === "Visible" ? t("ui.visible_only", "Visible Only") : t("ui.hidden_only", "Hidden Only")}
+                                    </button>
+                                    <Show when={isSettingsVisOpen()}>
+                                        <div class="skyrim-custom-dropdown-options font-scale-fix">
+                                            <div class={`skyrim-custom-dropdown-option ${settingsVisFilter() === 'All' ? 'selected' : ''}`} onClick={() => { setSettingsVisFilter("All"); setIsSettingsVisOpen(false); }}>{t("ui.all_visibility", "All Visibility")}</div>
+                                            <div class={`skyrim-custom-dropdown-option ${settingsVisFilter() === 'Visible' ? 'selected' : ''}`} onClick={() => { setSettingsVisFilter("Visible"); setIsSettingsVisOpen(false); }}>{t("ui.visible_only", "Visible Only")}</div>
+                                            <div class={`skyrim-custom-dropdown-option ${settingsVisFilter() === 'Hidden' ? 'selected' : ''}`} onClick={() => { setSettingsVisFilter("Hidden"); setIsSettingsVisOpen(false); }}>{t("ui.hidden_only", "Hidden Only")}</div>
+                                        </div>
+                                    </Show>
                                 </div>
                             </div>
 
                             <div class="settings-stat-list">
                                 <For each={settingsFilteredStats()}>
                                     {(stat) => (
-                                        <div class="settings-stat-row">
-                                            <div style={{ display: "flex", "flex-direction": "column", flex: 1 }}>
+                                        <div class="settings-stat-row" style={{ position: "relative", "z-index": openRowDropdownId() === stat.id ? "100" : "auto" }}>
+                                            <div class="settings-stat-info-block">
                                                 <span class="settings-stat-name-label">{stat.name}</span>
                                                 <span class="settings-stat-id-label">ID: {stat.id} {stat.isCustomRule ? "• Custom" : "• Vanilla"}</span>
                                             </div>
 
-                                            <div style={{ display: "flex", gap: "15px", "align-items": "center" }}>
-                                                <div class="skyrim-select-wrapper">
-                                                    <select
-                                                        class="skyrim-dropdown"
-                                                        style={{ width: "150px" }}
-                                                        value={stat.category}
-                                                        onChange={(e) => changeStatCategory(stat.id, e.currentTarget.value)}
+                                            <div class="settings-stat-actions-block">
+                                                <div class="skyrim-custom-dropdown-container settings-row-dropdown-width">
+                                                    <button
+                                                        class="skyrim-custom-dropdown-trigger"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setOpenRowDropdownId(openRowDropdownId() === stat.id ? null : stat.id);
+                                                            setIsSettingsCatOpen(false);
+                                                            setIsSettingsVisOpen(false);
+                                                        }}
                                                     >
-                                                        <For each={categoriesList()}>
-                                                            {(cat) => <option value={cat}>{cat}</option>}
-                                                        </For>
-                                                    </select>
+                                                        {localizeCategory(stat.categoryRaw || stat.category)}
+                                                    </button>
+
+                                                    <Show when={openRowDropdownId() === stat.id}>
+                                                        <div class="skyrim-custom-dropdown-options font-scale-fix">
+                                                            <Show when={stat.categoryRaw && !categoriesList().includes(stat.categoryRaw)}>
+                                                                <div class="skyrim-custom-dropdown-option selected" onClick={() => { changeStatCategory(stat.id, stat.categoryRaw!); setOpenRowDropdownId(null); }}>
+                                                                    {localizeCategory(stat.categoryRaw!)}
+                                                                </div>
+                                                            </Show>
+                                                            <For each={categoriesList()}>
+                                                                {(cat) => (
+                                                                    <div
+                                                                        class={`skyrim-custom-dropdown-option ${(stat.categoryRaw || stat.category) === cat ? 'selected' : ''}`}
+                                                                        onClick={() => { changeStatCategory(stat.id, cat); setOpenRowDropdownId(null); }}
+                                                                    >
+                                                                        {localizeCategory(cat)}
+                                                                    </div>
+                                                                )}
+                                                            </For>
+                                                        </div>
+                                                    </Show>
                                                 </div>
 
                                                 <button
@@ -386,7 +539,7 @@ function App() {
                                                     class="visibility-toggle-btn"
                                                     style={{ background: stat.isActive ? "#166534" : "#7f1d1d" }}
                                                 >
-                                                    {stat.isActive ? "VISIBLE" : "HIDDEN"}
+                                                    {stat.isActive ? t("ui.visible", "VISIBLE") : t("ui.hidden", "HIDDEN")}
                                                 </button>
                                             </div>
                                         </div>
@@ -394,21 +547,15 @@ function App() {
                                 </For>
                             </div>
 
-                            <div style={{ display: "flex", "justify-content": "flex-end", "margin-top": "20px" }}>
-                                <button class="sl-action-btn" style={{ width: "auto", padding: "10px 35px", margin: 0 }} onClick={() => setIsSettingsOpen(false)}>
-                                    Done
+                            <div class="settings-footer-actions">
+                                <button class="sl-action-btn footer-done-btn" onClick={saveAllChangesAndClose}>
+                                    {t("ui.done_btn", "Done")}
                                 </button>
                             </div>
                         </div>
                     </div>
                 </Portal>
             </Show>
-
-            {/* BARRA INFERIOR LIMPA */}
-            <div class="bottom-bar">
-                <div class="bottom-left"></div>
-                <div class="bottom-controls"></div>
-            </div>
         </div>
     );
 }

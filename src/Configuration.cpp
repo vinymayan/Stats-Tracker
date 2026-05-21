@@ -30,8 +30,13 @@ namespace StatsTracker {
         rapidjson::Value descVal; descVal.SetString(rule.description.c_str(), alloc);
         doc.AddMember("description", descVal, alloc);
 
-        rapidjson::Value catVal; catVal.SetString(rule.category.c_str(), alloc);
+        rapidjson::Value catVal;
+        std::string cleanCategory = rule.category.empty() ? "General" : rule.category;
+        catVal.SetString(cleanCategory.c_str(), alloc);
         doc.AddMember("category", catVal, alloc);
+
+        rapidjson::Value graphVarVal; graphVarVal.SetString(rule.graphVarName.c_str(), alloc);
+        doc.AddMember("graphVarName", graphVarVal, alloc);
 
         std::string filepath = RULES_DIR + rule.id + ".json";
         std::ofstream file(filepath);
@@ -78,7 +83,9 @@ namespace StatsTracker {
                 if (doc.HasMember("name")) rule.name = doc["name"].GetString();
                 if (doc.HasMember("description")) rule.description = doc["description"].GetString();
                 if (doc.HasMember("category")) rule.category = doc["category"].GetString();
-
+                if (doc.HasMember("graphVarName") && doc["graphVarName"].IsString()) {
+                    rule.graphVarName = doc["graphVarName"].GetString();
+                }
                 RulesDB[rule.id] = rule;
             }
         }
@@ -99,7 +106,7 @@ namespace StatsTracker {
                         std::string statName = it->name.GetString();
                         if (it->value.IsObject()) {
                             UIOptions[statName].isActive = it->value.HasMember("isActive") ? it->value["isActive"].GetBool() : true;
-                            UIOptions[statName].category = it->value.HasMember("category") ? it->value["category"].GetString() : "General";
+                            UIOptions[statName].category = it->value.HasMember("category") ? it->value["category"].GetString() : "";
                         }
                     }
                 }
@@ -195,6 +202,35 @@ namespace StatsTracker {
             if (rule.ruleType == TrackerRuleType::Global) {
                 auto glob = RE::TESForm::LookupByID<RE::TESGlobal>(rule.attachedGlobID);
                 if (glob) StatValuesCache[id] = glob->value;
+            }
+            // Lógica para extrair os dados do grafo de animação do Player
+            else if (rule.ruleType == TrackerRuleType::GraphVariable) {
+                auto player = RE::PlayerCharacter::GetSingleton();
+                if (player && !rule.graphVarName.empty()) {
+                    float val = 0.0f;
+                    RE::BSFixedString varName(rule.graphVarName);
+
+                    if (rule.graphType == GraphVarType::Bool) {
+                        bool bVal = false;
+                        if (player->GetGraphVariableBool(varName, bVal)) {
+                            val = bVal ? 1.0f : 0.0f;
+                        }
+                    }
+                    else if (rule.graphType == GraphVarType::Int) {
+                        int iVal = 0;
+                        if (player->GetGraphVariableInt(varName, iVal)) {
+                            val = static_cast<float>(iVal);
+                        }
+                    }
+                    else if (rule.graphType == GraphVarType::Float) {
+                        float fVal = 0.0f;
+                        if (player->GetGraphVariableFloat(varName, fVal)) {
+                            val = fVal;
+                        }
+                    }
+
+                    StatValuesCache[id] = val;
+                }
             }
         }
     }
@@ -346,7 +382,7 @@ namespace StatsTrackerUI {
 
 
     void RenderStatsTrackerMenu() {
-        std::string titleStr = LocalizationManager::ResolveText("{{settings.title}}", false);
+        std::string titleStr = LocalizationManager::T("settings.title", "Stats Tracker Editor");
         ImGui::Text("%s", titleStr.empty() ? "Stats Tracker Rules" : titleStr.c_str());
         ImGui::Separator();
 
@@ -357,13 +393,17 @@ namespace StatsTrackerUI {
             newRule.id = "NovaRegra_" + std::to_string(StatsTracker::RulesDB.size() + 1);
             newRule.name = LocalizationManager::T("common.unknown", "Unknown");
             StatsTracker::RulesDB[newRule.id] = newRule;
+            StatsTracker::SaveRule(newRule); // Salva no disco imediatamente ao criar
         }
 
         ImGui::Spacing();
         bool needsSave = false;
+        std::string ruleToDelete = "";
+        std::string oldIdToRename = "";
+        TrackerRule ruleToRenameData;
 
-        for (auto it = StatsTracker::RulesDB.begin(); it != StatsTracker::RulesDB.end(); ) {
-            auto& rule = it->second;
+        // Loop seguro: sem alterar a estrutura do mapa durante a iteração
+        for (auto& [id, rule] : StatsTracker::RulesDB) {
             ImGui::PushID(rule.id.c_str());
 
             if (ImGui::CollapsingHeader(rule.id.c_str())) {
@@ -375,17 +415,10 @@ namespace StatsTrackerUI {
                 if (ImGui::InputText(idLabel.c_str(), idBuf, sizeof(idBuf))) {
                     std::string newId(idBuf);
                     if (newId != rule.id && !newId.empty()) {
-                        std::string oldPath = StatsTracker::RULES_DIR + rule.id + ".json";
-                        if (std::filesystem::exists(oldPath)) std::filesystem::remove(oldPath);
-
-                        TrackerRule updatedRule = rule;
-                        updatedRule.id = newId;
-                        StatsTracker::RulesDB[newId] = updatedRule;
-
-                        it = StatsTracker::RulesDB.erase(it);
+                        oldIdToRename = rule.id;
+                        ruleToRenameData = rule;
+                        ruleToRenameData.id = newId;
                         needsSave = true;
-                        ImGui::PopID();
-                        continue;
                     }
                 }
 
@@ -422,18 +455,15 @@ namespace StatsTrackerUI {
 
                 ImGui::Separator();
 
-                // 2 e 3. OPÇÕES DE GLOBAL COM DROPDOWN E FLOAT
                 if (rule.ruleType == TrackerRuleType::Global) {
                     ImGui::TextColored({ 0.4f, 1.0f, 0.4f, 1.0f }, "Global Setup");
 
-                    // 3. Dropdown para selecionar a global (CORRIGIDO PARA "Global" NO SINGULAR)
                     std::string dropLabel = LocalizationManager::T("settings.resources.select_glob", "Select a Global Variable");
 
                     RE::FormID prevGlob = rule.attachedGlobID;
                     if (DrawDropdown(dropLabel.c_str(), "Global", rule.attachedGlobID, 500.0f)) {
                         bool conflict = false;
 
-                        // Checagem de Conflito (Evita que duas regras usem a mesma Global)
                         if (rule.attachedGlobID != 0) {
                             for (const auto& [otherId, otherRule] : StatsTracker::RulesDB) {
                                 if (otherId != rule.id &&
@@ -446,14 +476,13 @@ namespace StatsTrackerUI {
                         }
 
                         if (conflict) {
-                            rule.attachedGlobID = prevGlob; // Reverte se houver conflito
+                            rule.attachedGlobID = prevGlob;
                         }
                         else {
-                            needsSave = true; // Salva se estiver tudo certo
+                            needsSave = true;
                         }
                     }
 
-                    // 2. Global é tratada como Float por padrão (Opções Decimais)
                     const char* floatFormats[] = { "100", "100.0", "100.00", "100.000" };
                     int currentFmt = static_cast<int>(rule.floatFormat);
                     std::string fmtLabel = LocalizationManager::T("common.decimal_format", "Decimal Format") + "##globalFmt";
@@ -464,7 +493,13 @@ namespace StatsTrackerUI {
                 }
                 else if (rule.ruleType == TrackerRuleType::GraphVariable) {
                     ImGui::TextColored({ 0.4f, 1.0f, 1.0f, 1.0f }, "Graph Setup");
-
+                    char graphNameBuf[256];
+                    strcpy_s(graphNameBuf, rule.graphVarName.c_str());
+                    std::string graphLabel = LocalizationManager::T("header.graph_var_name", "Graph Variable Name");
+                    if (ImGui::InputText(graphLabel.c_str(), graphNameBuf, sizeof(graphNameBuf))) {
+                        rule.graphVarName = graphNameBuf;
+                        needsSave = true;
+                    }
                     const char* graphTypes[] = { "Bool", "Int", "Float" };
                     int currentGraph = static_cast<int>(rule.graphType);
                     std::string baseLabel = LocalizationManager::T("common.base_type", "Base Type");
@@ -487,18 +522,28 @@ namespace StatsTrackerUI {
                 ImGui::Spacing();
                 std::string btnRemove = LocalizationManager::T("common.delete", "DELETE");
                 if (ImGui::Button(btnRemove.c_str(), { 150, 0 })) {
-                    std::string path = StatsTracker::RULES_DIR + rule.id + ".json";
-                    if (std::filesystem::exists(path)) std::filesystem::remove(path);
-
-                    it = StatsTracker::RulesDB.erase(it);
-                    ImGui::PopID();
-                    continue;
+                    ruleToDelete = rule.id;
+                    needsSave = true;
                 }
 
                 ImGui::Unindent();
             }
             ImGui::PopID();
-            ++it;
+        }
+
+        // Executa as mutações estruturais de forma segura fora da iteração do loop
+        if (!ruleToDelete.empty()) {
+            std::string path = StatsTracker::RULES_DIR + ruleToDelete + ".json";
+            if (std::filesystem::exists(path)) std::filesystem::remove(path);
+            StatsTracker::RulesDB.erase(ruleToDelete);
+        }
+
+        if (!oldIdToRename.empty()) {
+            std::string oldPath = StatsTracker::RULES_DIR + oldIdToRename + ".json";
+            if (std::filesystem::exists(oldPath)) std::filesystem::remove(oldPath);
+            StatsTracker::RulesDB.erase(oldIdToRename);
+            StatsTracker::RulesDB[ruleToRenameData.id] = ruleToRenameData;
+            StatsTracker::SaveRule(ruleToRenameData);
         }
 
         if (needsSave) {
@@ -511,6 +556,7 @@ namespace StatsTrackerUI {
     void RegisterMenu() {
         if (SKSEMenuFramework::IsInstalled()) {
             StatsTracker::LoadRules();
+            StatsTracker::LoadUISettings();
             LocalizationManager::LoadLocalization();
             SKSEMenuFramework::SetSection("Stats Tracker");
             SKSEMenuFramework::AddSectionItem("Rules Manager", RenderStatsTrackerMenu);
