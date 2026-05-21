@@ -1,1 +1,421 @@
-﻿
+﻿/* app.css - Skyrim UI Theme & Layout Alignment (Solid Colors Only) */
+
+:root {
+    --skyrim-text-normal: #a5a5a5;
+    --skyrim-text-hover: #ffffff;
+    --skyrim-bg-dark: #080808;
+    --skyrim-accent: #1e1e1e;
+    --skyrim-highlight: #d4af37;
+    --skyrim-border: #383838;
+    --skyrim-border-light: #555555;
+    font-family: 'Futura', 'Trebuchet MS', sans-serif;
+    user-select: none;
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+    background: transparent;
+    color: var(--skyrim-text-normal);
+}
+
+.skyrim-viewport {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* Cores sólidas sem transparência no fundo lateral */
+.bg-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 55%;
+    height: 100%;
+    background: #050505;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* LARGURA GERAL DA UI LIMITADA A 50% DO MONITOR */
+.tracker-main-panel {
+    position: absolute;
+    top: 60px;
+    left: 80px;
+    width: 46vw;
+    max-width: 50vw;
+    bottom: 30px;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+}
+
+/* BARRA DE FILTROS ALINHADA NA MESMA LINHA */
+.tracker-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 25px;
+    width: 100%;
+}
+
+.main-search-input {
+    flex-grow: 1;
+    margin: 0;
+}
+
+.settings-btn {
+    cursor: pointer;
+    height: 37px;
+    padding: 0 15px;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+/* LIST CONTAINER */
+.stat-list-container {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-grow: 1;
+    padding-right: 10px;
+    padding-bottom: 0px;
+    height: 100%;
+}
+
+.stat-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 21px;
+    color: var(--skyrim-text-normal);
+    padding: 11px 15px;
+    border-radius: 2px;
+    border-bottom: 1px solid #141414;
+}
+
+    .stat-list-item:hover {
+        background: #181818;
+        color: var(--skyrim-text-hover);
+    }
+
+.stat-name {
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-weight: bold;
+    color: var(--skyrim-highlight);
+    white-space: nowrap;
+    font-size: 21px;
+}
+
+/* HOVER TOOLTIP FLUTUANTE */
+.stat-hover-tooltip {
+    background: #0c0c0c;
+    border: 1px solid var(--skyrim-border-light);
+    color: #dddddd;
+    padding: 12px 18px;
+    font-size: 15px;
+    line-height: 1.4;
+    max-width: 320px;
+    border-radius: 2px;
+    box-shadow: 5px 5px 15px #000000;
+}
+
+.no-stats-fallback {
+    color: #444444;
+    font-style: italic;
+    font-size: 18px;
+    margin-top: 30px;
+}
+
+/* ==========================================================================
+   ESTILIZAÇÃO CUSTOMIZADA: INPUT TEXT (BARRAS DE TEXTO)
+   ========================================================================== */
+.skyrim-search-input {
+    background: #141414;
+    border: 1px solid var(--skyrim-border);
+    color: var(--skyrim-text-hover);
+    font-family: inherit;
+    font-size: 15px;
+    padding: 8px 12px;
+    height: 37px;
+    outline: none;
+    box-sizing: border-box;
+    user-select: text;
+    pointer-events: auto;
+    transition: border-color 0.1s ease, background-color 0.1s ease;
+}
+
+    .skyrim-search-input:focus {
+        border-color: var(--skyrim-highlight);
+        background: #1c1c1c;
+    }
+
+    .skyrim-search-input::placeholder {
+        color: #555555;
+    }
+
+/* ==========================================================================
+   ESTILIZAÇÃO CUSTOMIZADA: DROPDOWN SELECTS (CUSTOM COMPONENT)
+   ========================================================================== */
+.skyrim-custom-dropdown-container {
+    position: relative;
+    display: inline-block;
+    width: 160px;
+    box-sizing: border-box;
+    z-index: 10;
+}
+
+.skyrim-custom-dropdown-trigger {
+    background-color: #141414;
+    color: var(--skyrim-text-hover);
+    font-family: inherit;
+    font-size: 15px;
+    border: 1px solid var(--skyrim-border);
+    padding: 8px 30px 8px 12px;
+    height: 37px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    outline: none;
+    position: relative;
+    text-transform: uppercase;
+    box-sizing: border-box;
+    transition: border-color 0.1s ease, background-color 0.1s ease;
+}
+
+    /* Losango dourado injetado no botão customizado */
+    .skyrim-custom-dropdown-trigger::after {
+        content: "◆";
+        font-size: 10px;
+        color: var(--skyrim-text-normal);
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        transition: color 0.1s ease;
+    }
+
+    .skyrim-custom-dropdown-trigger:hover {
+        border-color: var(--skyrim-highlight);
+        background-color: #1c1c1c;
+    }
+
+        .skyrim-custom-dropdown-trigger:hover::after {
+            color: var(--skyrim-highlight);
+        }
+
+/* Caixa de opções flutuante 100% sólida e opaca */
+.skyrim-custom-dropdown-options {
+    position: absolute;
+    top: 38px;
+    left: 0;
+    width: 100%;
+    background-color: #0c0c0c;
+    border: 1px solid var(--skyrim-border-light);
+    box-shadow: 0px 4px 15px #000000;
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 100;
+}
+
+.skyrim-custom-dropdown-option {
+    padding: 10px 12px;
+    color: var(--skyrim-text-normal);
+    font-size: 15px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background-color 0.05s ease, color 0.05s ease;
+}
+
+    .skyrim-custom-dropdown-option:hover {
+        background-color: #181818;
+        color: var(--skyrim-text-hover);
+    }
+
+    .skyrim-custom-dropdown-option.selected {
+        background-color: var(--skyrim-accent);
+        color: var(--skyrim-highlight);
+        font-weight: bold;
+    }
+/* ==========================================================================
+   CONFIGURAÇÃO DA JANELA MODAL (SETTINGS)
+   ========================================================================== */
+.settings-modal-box {
+    background: var(--skyrim-bg-dark);
+    border: 1px solid var(--skyrim-border-light);
+    padding: 30px;
+    width: 900px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    color: white;
+    box-shadow: 0 0 30px #000000;
+    z-index: 10001;
+}
+
+    .settings-modal-box h2 {
+        font-size: 22px;
+        letter-spacing: 1px;
+        margin-bottom: 20px;
+        text-transform: uppercase;
+    }
+
+.settings-filter-bar {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--skyrim-border);
+    padding-bottom: 15px;
+}
+
+.settings-stat-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 8px;
+}
+
+.settings-stat-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--skyrim-accent);
+    padding: 10px 15px;
+    border: 1px solid #252525;
+}
+
+    .settings-stat-row:hover {
+        background: #252525;
+        border-color: var(--skyrim-border-light);
+    }
+
+.settings-stat-name-label {
+    font-size: 18px;
+    color: var(--skyrim-text-hover);
+}
+
+.settings-stat-id-label {
+    font-size: 12px;
+    color: #666666;
+    margin-top: 2px;
+}
+
+.visibility-toggle-btn {
+    width: 90px;
+    height: 37px;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    font-size: 13px;
+    color: white;
+    letter-spacing: 0.5px;
+    border-radius: 1px;
+}
+
+/* BOTTOM PROMPTS BAR */
+.bottom-bar {
+    position: absolute;
+    bottom: 35px;
+    left: 80px;
+    right: 80px;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    color: var(--skyrim-text-normal);
+    font-size: 15px;
+}
+
+.bottom-controls {
+    display: flex;
+    gap: 30px;
+}
+
+.control-prompt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--skyrim-text-hover);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* BOTÃO ESTILO SKYRIM GERAL */
+.key-button {
+    background: #222222;
+    border: 1px solid var(--skyrim-border-light);
+    color: var(--skyrim-text-hover);
+    font-family: inherit;
+    box-shadow: 1px 1px 0px #000000;
+    transition: background 0.1s;
+}
+
+    .key-button:hover {
+        background: #333333;
+        border-color: var(--skyrim-text-hover);
+    }
+
+.skyrim-checkbox {
+    cursor: pointer;
+    font-size: 22px;
+    color: var(--skyrim-text-hover);
+}
+
+.sl-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #020202;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.sl-action-btn {
+    padding: 10px 25px;
+    font-size: 16px;
+    font-family: inherit;
+    text-transform: uppercase;
+    background: #262626;
+    color: #ffffff;
+    border: 1px solid var(--skyrim-border-light);
+    cursor: pointer;
+    letter-spacing: 1px;
+}
+
+    .sl-action-btn:hover {
+        background: #363636;
+        border-color: var(--skyrim-text-hover);
+    }
+
+/* SCROLLBARS */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--skyrim-border-light);
+}
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--skyrim-text-normal);
+    }
