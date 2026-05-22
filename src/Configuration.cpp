@@ -92,7 +92,7 @@ namespace StatsTracker {
     }
 
     void LoadUISettings() {
-        std::filesystem::path path("Data/SKSE/Plugins/StatsTracker/settings.json");
+        std::filesystem::path path("Data/SKSE/Plugins/Stats Tracker/Settings.json");
         if (std::filesystem::exists(path)) {
             std::ifstream file(path);
             if (file.is_open()) {
@@ -115,7 +115,7 @@ namespace StatsTracker {
     }
 
     void SaveUISettings() {
-        std::filesystem::path dir("Data/SKSE/Plugins/StatsTracker");
+        std::filesystem::path dir("Data/SKSE/Plugins/Stats Tracker");
         if (!std::filesystem::exists(dir)) std::filesystem::create_directories(dir);
 
         rapidjson::Document doc;
@@ -251,7 +251,7 @@ namespace LocalizationManager {
 
     void LoadLocalization() {
         LangCache.clear();
-        std::string locDir = "Data/PrismaUI/views/Stats Tracker/Localization/";
+        std::string locDir = "Data/SKSE/Plugins/Stats Tracker/Localization/";
 
         if (std::filesystem::exists(locDir)) {
             for (const auto& entry : std::filesystem::directory_iterator(locDir)) {

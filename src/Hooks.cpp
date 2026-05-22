@@ -159,17 +159,15 @@ struct ProcessInputQueueHook {
 
 bool OnInput(RE::InputEvent* event) { 
     if (!event) return false;
-    if (event->device != RE::INPUT_DEVICE::kKeyboard) return false;
     auto button = event->AsButtonEvent();
     if (!button) return false;
     if (!button->IsDown()) return false;
-    if (button->GetIDCode() == RE::BSWin32KeyboardDevice::Keys::kF3) {
-        if (Prisma::IsHidden()) {
-            Prisma::Show();
-        } else {
+    if (!Prisma::IsHidden()) {
+        auto userEvents = RE::UserEvents::GetSingleton();
+        auto action = button->QUserEvent();
+        if (action == userEvents->cancel) {
             Prisma::Hide();
         }
-        return true;
     }
     return false;
 }
@@ -183,7 +181,7 @@ public:
             if (ui && !Prisma::IsHidden()) {
                 auto focusMenu = ui->GetMenu("PrismaUI_FocusMenu");
                 if (focusMenu) {
-                    focusMenu->menuFlags.set(RE::UI_MENU_FLAGS::kFreezeFrameBackground, RE::UI_MENU_FLAGS::kTopmostRenderedMenu);
+                    focusMenu->menuFlags.set(RE::UI_MENU_FLAGS::kFreezeFrameBackground, RE::UI_MENU_FLAGS::kTopmostRenderedMenu, RE::UI_MENU_FLAGS::kTopmostRenderedMenu);
                 }
             }
 

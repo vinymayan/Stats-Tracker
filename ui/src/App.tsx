@@ -290,6 +290,12 @@ function App() {
         setStats(prev => prev.map(s => (s.id === id ? { ...s, category: validatedCat, categoryRaw: validatedCat } : s)));
     };
 
+    const triggerMenuEvent = (action: string) => {
+        if (typeof (window as any).TriggerMenuEvent === 'function') {
+            (window as any).TriggerMenuEvent(JSON.stringify({ action }));
+        }
+    };
+
     return (
         <div class="skyrim-viewport">
             <div class="bg-gradient"></div>
@@ -300,11 +306,23 @@ function App() {
                         <img src="/Assets/Side.svg" class="skyrim-nav-side left" alt="" />
                         <img src="/Assets/Side.svg" class="skyrim-nav-side right" alt="" />
                         <div class="nav-tabs-holder">
-                            <button class="skyrim-big-tab">{t("ui.tab_quests", "Quests")}</button>
+                            <button
+                                class="skyrim-big-tab"
+                                onClick={() => triggerMenuEvent("Journal")}
+                            >
+                                {t("ui.tab_quests", "Quests")}
+                            </button>
+
                             <button class="skyrim-big-tab active">
                                 <span class="tab-bracket">◁</span> {t("ui.tab_stats_tracker", "Stats Tracker")} <span class="tab-bracket">▷</span>
                             </button>
-                            <button class="skyrim-big-tab">{t("ui.tab_system", "System")}</button>
+
+                            <button
+                                class="skyrim-big-tab"
+                                onClick={() => triggerMenuEvent("Pause")}
+                            >
+                                {t("ui.tab_system", "System")}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -354,7 +372,7 @@ function App() {
                         />
 
                         <button class="key-button settings-btn" onClick={() => setIsSettingsOpen(true)}>
-                            {t("ui.settings_btn", "⚙️ SETTINGS")}
+                            {t("ui.settings_btn", "⚙️")}
                         </button>
                     </div>
 

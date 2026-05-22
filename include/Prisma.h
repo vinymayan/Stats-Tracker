@@ -10,4 +10,5 @@ public:
     static void Show();
     static void Hide();
     static bool IsHidden();
+    static inline bool TPM = false;
 };

@@ -37,7 +37,7 @@ struct TrackerRule {
 
 namespace StatsTracker {
     inline std::map<std::string, TrackerRule> RulesDB;
-    const std::string RULES_DIR = "Data/SKSE/Plugins/StatsTracker/Rules/";
+    const std::string RULES_DIR = "Data/SKSE/Plugins/Stats Tracker/Rules/";
 
     void SaveRule(const TrackerRule& rule);
     void LoadRules();
@@ -53,7 +53,7 @@ namespace StatsTracker {
 
     void LoadUISettings();
     void SaveUISettings();
-    void FetchVanillaStatsAsync(); // A função que roda o Callback
+    void FetchVanillaStatsAsync();
 }
 
 namespace LocalizationManager {
@@ -63,13 +63,11 @@ namespace LocalizationManager {
     void FlattenJSON(const rapidjson::Value& value, const std::string& parentKey);
     void LoadLocalization();
 
-    // 1. AJUSTE: Adicionado o parâmetro de fallback
     std::string T(const std::string& key, const std::string& fallback = "");
     std::string ResolveText(const std::string& text, bool isEditor);
 }
 
 namespace StatsTrackerUI {
-    void GeneralMenu();
     void RegisterMenu();
     void Load();
     void Save();

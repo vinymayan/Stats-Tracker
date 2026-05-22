@@ -9,6 +9,14 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         StatsTrackerUI::RegisterMenu();
     }
     if (message->type == SKSE::MessagingInterface::kPostLoad) {
+        if (GetModuleHandleA("TweenPause.dll")) {
+            Prisma::TPM = true;
+            logger::info("TweenPause.dll founded");
+        }
+        else {
+            Prisma::TPM = false;
+            logger::info("TweenPause.dll not found.");
+        }
         Prisma::Install();
     }
 }

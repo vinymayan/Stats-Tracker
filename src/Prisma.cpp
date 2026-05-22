@@ -49,7 +49,7 @@ void Prisma::Show() {
                         json item;
                         item["id"] = statName;
                         item["name"] = LocalizationManager::T("vanilla_stats." + statName, statName);
-                        item["desc"] = LocalizationManager::T("vanilla_stats_desc." + statName, "Skyrim engine statistic.");
+                        item["desc"] = LocalizationManager::T("vanilla_stats_desc." + statName, "Skyrim Vanilla Stat");
                         item["value"] = value;
                         item["isCustomRule"] = false;
 
@@ -108,7 +108,7 @@ void Prisma::Show() {
                     });
                 });
 
-            // ======= LISTENER ATUALIZADO: SALVA O BUNDLE COMPLETO AO CLICAR EM DONE (UMA SÓ ESCRITA EM DISCO) =======
+            // ======= LISTENER ATUALIZADO: SALVA  =======
             PrismaUI->RegisterJSListener(currentView, "UpdateStatUISettings", [](const char* data) -> void {
                 if (!data) return;
                 try {
@@ -131,6 +131,40 @@ void Prisma::Show() {
 
                     // Grava fisicamente no disco uma única vez
                     StatsTracker::SaveUISettings();
+                }
+                catch (...) {}
+                });
+
+            // ======= LISTENER: DISPARAR EVENTOS DE MENU NATIVOS (JOURNAL / PAUSE) =======
+            PrismaUI->RegisterJSListener(currentView, "TriggerMenuEvent", [](const char* data) -> void {
+                if (!data) return;
+                try {
+                    json jsonDoc = json::parse(data);
+                    std::string action = jsonDoc.value("action", "");
+                    if (action.empty()) return;
+                    Prisma::Hide();
+                   if(action == "Journal") {
+                       auto q = RE::UIMessageQueue::GetSingleton();
+                       if (q) {
+                           q->AddMessage(RE::JournalMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+                           
+                       }
+                   }
+                    else if (action == "Pause") {
+                       SKSE::GetTaskInterface()->AddUITask([]() {
+                           auto dispatcher = SKSE::GetModCallbackEventSource();
+                           if (dispatcher) {
+                               SKSE::ModCallbackEvent modEvent{
+                                   RE::BSFixedString("TPM_Open"),
+                                   nullptr,
+                                   0.0f,
+                                   nullptr
+                               };
+                               dispatcher->SendEvent(&modEvent);
+                           }
+                           });
+				   }
+                    
                 }
                 catch (...) {}
                 });
