@@ -10,5 +10,6 @@ public:
     static void Show();
     static void Hide();
     static bool IsHidden();
+    static void SendKeyPress(const std::string& key);
     static inline bool TPM = false;
 };

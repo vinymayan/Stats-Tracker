@@ -157,16 +157,37 @@ struct ProcessInputQueueHook {
     }
 };
 
-bool OnInput(RE::InputEvent* event) { 
+bool OnInput(RE::InputEvent* event) {
     if (!event) return false;
     auto button = event->AsButtonEvent();
     if (!button) return false;
-    if (!button->IsDown()) return false;
-    if (!Prisma::IsHidden()) {
+
+
+    if (!Prisma::IsHidden() && !button->IsUp()) {
         auto userEvents = RE::UserEvents::GetSingleton();
         auto action = button->QUserEvent();
-        if (action == userEvents->cancel) {
-            Prisma::Hide();
+
+        // Converte o evento nativo para string_view para fazermos as comparações
+        std::string_view eventName = action.c_str();
+
+        // Mapeamento dos botões nativos para teclas direcionais enviadas à UI
+        if (eventName == "Up") {
+            Prisma::SendKeyPress("ArrowUp");
+        }
+        else if (eventName == "Down") {
+            Prisma::SendKeyPress("ArrowDown");
+        }
+        else if (eventName == "Left") {
+            Prisma::SendKeyPress("ArrowLeft");
+        }
+        else if (eventName == "Right") {
+            Prisma::SendKeyPress("ArrowRight");
+        }
+        else if (eventName == "Accept") {
+            Prisma::SendKeyPress("Enter");
+        }
+        else if (eventName == "Cancel" || eventName == "cancel") {
+            Prisma::SendKeyPress("Escape");
         }
     }
     return false;

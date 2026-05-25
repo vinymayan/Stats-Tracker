@@ -10,9 +10,11 @@
     --skyrim-border-light: #444444;
     font-family: 'Futura', 'Trebuchet MS', sans-serif;
     user-select: none;
-    /* CÁLCULO DE ESCALONAMENTO RESPONSIVO DINÂMICO */
-    /* Garante consistência em monitores UltraWide, 1080p, 2K ou 4K sem quebrar limites */
-    font-size: calc(14px + (4 * (100vw - 1280px) / 2560));
+    /* Configuração de Fallbacks para as variáveis injetadas via Javascript */
+    --h2-size: 22px;
+    --h4-size: 15px;
+    /* Consome o cálculo automático por padrão ou o tamanho fixo injetado */
+    font-size: var(--root-font-size, calc(14px + (4 * (100vw - 1280px) / 2560)));
 }
 
 body {
@@ -66,23 +68,63 @@ body {
     flex-shrink: 0;
 }
 
-
-.nav-navigation-box {
-    background: var(--skyrim-bg-dark);
-    border: 1px solid var(--skyrim-border-light);
-    outline: 1px solid var(--skyrim-border);
-    outline-offset: -5px;
+/* NOVO: Fornece o contexto de posicionamento absoluto para os SVGs sem clipá-los */
+.nav-navigation-wrapper {
     position: relative;
     width: 90%;
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 0.6rem 0;
-    box-sizing: border-box;
 }
 
+.nav-navigation-box {
+    position: relative;
+    /* AJUSTE: Agora ocupa 100% do wrapper pai estável */
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.6rem 3rem;
+    box-sizing: border-box;
+    /* Passa a cor da borda mais clara para o fundo principal, servindo de linha externa */
+    background: var(--skyrim-border-light);
+    /* RECORTE HEXAGONAL: Mantido perfeitamente aqui */
+    clip-path: polygon(25px 0, calc(100% - 25px) 0, 100% 50%, calc(100% - 25px) 100%, 25px 100%, 0 50%);
+}
 
+    /* Camada Interna 1: Recria o fundo preto recuado em 1px para expor a borda externa */
+    .nav-navigation-box::before {
+        content: "";
+        position: absolute;
+        top: 1px;
+        left: 1px;
+        right: 1px;
+        bottom: 1px;
+        background: var(--skyrim-bg-dark);
+        clip-path: polygon(25px 0, calc(100% - 25px) 0, 100% 50%, calc(100% - 25px) 100%, 25px 100%, 0 50%);
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    /* Camada Interna 2: Recria o outline fino de detalhe (estilo Skyrim) acompanhando o corte */
+    .nav-navigation-box::after {
+        content: "";
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        right: 5px;
+        bottom: 5px;
+        background: transparent;
+        border: 1px solid var(--skyrim-border);
+        clip-path: polygon(23px 0, calc(100% - 23px) 0, 100% 50%, calc(100% - 23px) 100%, 23px 100%, 0 50%);
+        z-index: 1;
+        pointer-events: none;
+    }
+
+    /* AJUSTE: Eleva o nível do container de texto para que fique acima dos fundos falsos criados */
     .nav-navigation-box .nav-tabs-holder {
+        position: relative;
+        z-index: 2;
         gap: 2rem;
     }
 
@@ -94,7 +136,6 @@ body {
     top: 50%;
     z-index: 5;
     pointer-events: none;
-
 }
 
     .skyrim-nav-side.left {
@@ -164,7 +205,6 @@ body {
     height: 1.6rem;
     z-index: 5;
     pointer-events: none;
-
 }
 
     .skyrim-frame-corner.tl {
@@ -336,6 +376,7 @@ body {
     height: 2.2rem;
     outline: none;
     box-sizing: border-box;
+    user-select: text !important;
 }
 
     .skyrim-search-input:focus {
@@ -433,10 +474,11 @@ body {
     flex-direction: column;
     color: #aaa;
     box-sizing: border-box;
+    overflow-y: auto;
 }
 
     .settings-modal-box h2 {
-        font-size: 1.3rem;
+        font-size: var(--h2-size, 22px);
         color: white;
         margin-top: 0;
         margin-bottom: 1.5rem;
@@ -464,13 +506,14 @@ body {
     border: 1px solid #222;
     display: flex;
     flex-direction: column;
-    min-height: 15rem; /* Ajuste do tamanho mínimo do bloco */
+    min-height: 15rem;
+    flex-shrink: 0;
 }
 
 .settings-section-title {
     margin: 0 0 0.8rem 0;
     color: var(--skyrim-highlight);
-    font-size: 0.95rem;
+    font-size: var(--h4-size, 18px);
     letter-spacing: 0.5px;
 }
 
@@ -565,7 +608,8 @@ body {
     flex-direction: column;
     gap: 0.4rem;
     padding-right: 0.3rem;
-    min-height: 0;
+    min-height: 18rem;
+    flex-shrink: 0;
 }
 
 .settings-stat-row {
@@ -624,18 +668,6 @@ body {
     letter-spacing: 0.5px;
 }
 
-.settings-footer-actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 1.2rem;
-    flex-shrink: 0;
-}
-
-.footer-done-btn {
-    width: auto !important;
-    padding: 0.6rem 2.5rem !important;
-    height: auto !important;
-}
 
 /* BOTÕES ESTILO RÚSTICO */
 .key-button {

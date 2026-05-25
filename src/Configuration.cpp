@@ -160,8 +160,9 @@ namespace StatsTracker {
         auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
         if (!vm) return;
 
+        // "Days Passed" removido desta lista para ser tratado como caso especial abaixo
         const std::vector<std::string> statsToTrack = {
-            "Locations Discovered", "Dungeons Cleared", "Days Passed", "Hours Slept",
+            "Locations Discovered", "Dungeons Cleared", "Hours Slept",
             "Hours Waiting", "Standing Stones Found", "Gold Found", "Most Gold Carried",
             "Chests Looted", "Skill Increases", "Skill Books Read", "Food Eaten",
             "Training Sessions", "Books Read", "Horses Owned", "Houses Owned",
@@ -196,6 +197,12 @@ namespace StatsTracker {
             RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new GenericStatCallback(stat) };
             vm->DispatchStaticCall("Game", "QueryStat", args, callback);
         }
+
+        // 1. Days Passed (via Calendar)
+        if (auto calendar = RE::Calendar::GetSingleton()) {
+            StatValuesCache["Days Passed"] = static_cast<float>(calendar->midnightsPassed);
+        }
+
 
         // Também pegamos o valor atual das nossas Custom Rules criadas na UI de SKSE
         for (const auto& [id, rule] : RulesDB) {

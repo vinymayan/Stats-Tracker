@@ -58,15 +58,15 @@ const defaultVanillaCategories: Record<string, string> = {
     "Dawnguard Quests Completed": "Quests", "Dragonborn Quests Completed": "Quests",
     "Questlines Completed": "Quests",
 
-    "Diseases Contracted": "DLC", "Days as a Vampire": "DLC", "Days as a Werewolf": "DLC",
-    "Necks Bitten": "DLC", "Vampirism Cures": "DLC", "Werewolf Transformations": "DLC", "Mauls": "DLC"
+    "Diseases Contracted": "General", "Days as a Vampire": "General", "Days as a Werewolf": "General",
+    "Necks Bitten": "General", "Vampirism Cures": "General", "Werewolf Transformations": "General", "Mauls": "General"
 };
 
 function App() {
     const [stats, setStats] = createSignal<TrackedStat[]>([]);
     const [activeTab, setActiveTab] = createSignal<string>('All');
     const [search, setSearch] = createSignal("");
-    const [categoriesList, setCategoriesList] = createSignal<string[]>(["General", "Combat", "Magic", "Crime", "Bounties", "Crafting", "Shouts", "Quests", "DLC"]);
+    const [categoriesList, setCategoriesList] = createSignal<string[]>(["General", "Combat", "Magic", "Crime", "Bounties", "Crafting", "Shouts", "Quests"]);
     const [newCatName, setNewCatName] = createSignal("");
 
     // Dicionário Dinâmico reativo alimentado via C++
@@ -74,7 +74,16 @@ function App() {
 
     // Sistema Macro de Tradução e Fallback
     const t = (key: string, fallback: string = "") => translations()[key] || fallback;
-
+    // Detecta se o usuário está interagindo com qualquer campo de texto/input na UI
+    const isEditing = () => {
+        const active = document.activeElement;
+        if (!active) return false;
+        return (
+            active.tagName === 'INPUT' ||
+            active.tagName === 'TEXTAREA' ||
+            active.getAttribute('contenteditable') === 'true'
+        );
+    };
     const localizeCategory = (cat: string) => {
         if (!cat) return "";
         if (cat === "All") return t("ui.all_categories", "All Categories");
@@ -96,7 +105,7 @@ function App() {
     // CORREÇÃO: Protege apenas as chaves nativas essenciais do Vanilla Skyrim.
     // Categorias customizadas ou tokens de tradução agora estão liberados para renomear/deletar.
     const isSystemCategory = (cat: string) => {
-        const defaultKeys = ["General", "Combat", "Magic", "Crime", "Bounties", "Crafting", "Shouts", "Quests", "DLC"];
+        const defaultKeys = ["General", "Combat", "Magic", "Crime", "Bounties", "Crafting", "Shouts", "Quests"];
         return defaultKeys.includes(cat);
     };
 
@@ -116,6 +125,25 @@ function App() {
 
     const [sortBy, setSortBy] = createSignal<'category' | 'name' | 'value'>('name');
     const [sortDirection, setSortDirection] = createSignal<'asc' | 'desc'>('asc');
+    const [autoScale, setAutoScale] = createSignal(true);
+    const [baseFontSize, setBaseFontSize] = createSignal<string | number>(16);
+    const [h2FontSize, setH2FontSize] = createSignal<string | number>(22);
+    const [h4FontSize, setH4FontSize] = createSignal<string | number>(15);
+
+    // Efeito para injetar e alternar o tamanho base da fonte no :root do documento
+    createEffect(() => {
+        if (autoScale()) {
+            document.documentElement.style.setProperty('--root-font-size', 'calc(14px + (4 * (100vw - 1280px) / 2560))');
+        } else {
+            document.documentElement.style.setProperty('--root-font-size', `${baseFontSize()}px`);
+        }
+    });
+
+    // Efeito para injetar os tamanhos customizados de títulos e subtítulos
+    createEffect(() => {
+        document.documentElement.style.setProperty('--h2-size', `${h2FontSize()}px`);
+        document.documentElement.style.setProperty('--h4-size', `${h4FontSize()}px`);
+    });
 
     onMount(() => {
         const handleStatsReceived = (e: any) => {
@@ -126,7 +154,7 @@ function App() {
                 setTranslations(localization);
             }
 
-            const defaultKeys = ["General", "Combat", "Magic", "Crime", "Bounties", "Crafting", "Shouts", "Quests", "DLC"];
+            const defaultKeys = ["General", "Combat", "Magic", "Crime", "Bounties", "Crafting", "Shouts", "Quests"];
             let baseCats = [...defaultKeys];
 
             if (Array.isArray(customCategories) && customCategories.length > 0) {
@@ -165,6 +193,51 @@ function App() {
 
         window.addEventListener('OnTrackedStatsReceived', handleStatsReceived);
 
+        const handleNavigationKeys = (e: KeyboardEvent) => {
+            // Se o usuário estiver digitando em uma barra de pesquisa ou editando categoria, bloqueia a navegação estrutural
+            if (isEditing()) return;
+
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const container = document.querySelector('.stat-list-container');
+                if (container) {
+                    container.scrollBy({ top: -40, behavior: 'smooth' });
+                }
+            }
+            else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const container = document.querySelector('.stat-list-container');
+                if (container) {
+                    container.scrollBy({ top: 40, behavior: 'smooth' });
+                }
+            }
+            else if (e.key === 'ArrowLeft') {
+                // Só muda de aba se o menu de configurações não estiver bloqueando a tela
+                if (isSettingsOpen()) return;
+                e.preventDefault();
+                triggerMenuEvent("Journal"); // Chama a aba de Quests nativa
+            }
+            else if (e.key === 'ArrowRight') {
+                if (isSettingsOpen()) return;
+                e.preventDefault();
+                triggerMenuEvent("Pause");   // Chama a aba System nativa
+            }
+            else if (e.key === 'Escape') {
+                e.preventDefault();
+                if (isSettingsOpen()) {
+                    // Se as configurações estiverem abertas, o 'Voltar' apenas fecha o modal salvando
+                    saveAllChangesAndClose();
+                } else {
+                    // Caso contrário, fecha a janela inteira do Prisma chamando o listener do C++
+                    if (typeof (window as any).hideWindow === 'function') {
+                        (window as any).hideWindow("{}");
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleNavigationKeys);
+
         const requestDataFromBackend = () => {
             if (typeof (window as any).RequestTrackedStats === 'function') {
                 (window as any).RequestTrackedStats("{}");
@@ -186,6 +259,7 @@ function App() {
             window.removeEventListener('OnTrackedStatsReceived', handleStatsReceived);
             window.removeEventListener('BackendReady', requestDataFromBackend);
             window.removeEventListener('click', handleGlobalClick);
+            window.removeEventListener('keydown', handleNavigationKeys);
             clearTimeout(fallbackTimer);
         });
     });
@@ -302,27 +376,31 @@ function App() {
 
             <div class="tracker-main-panel">
                 <div class="skyrim-top-navigation">
-                    <div class="nav-navigation-box">
+                    {/* NOVO WRAPPER: Permite que os SVGs transbordem sem sofrer o corte do clip-path */}
+                    <div class="nav-navigation-wrapper">
                         <img src="/Assets/Side.svg" class="skyrim-nav-side left" alt="" />
                         <img src="/Assets/Side.svg" class="skyrim-nav-side right" alt="" />
-                        <div class="nav-tabs-holder">
-                            <button
-                                class="skyrim-big-tab"
-                                onClick={() => triggerMenuEvent("Journal")}
-                            >
-                                {t("ui.tab_quests", "Quests")}
-                            </button>
 
-                            <button class="skyrim-big-tab active">
-                                <span class="tab-bracket">◁</span> {t("ui.tab_stats_tracker", "Stats Tracker")} <span class="tab-bracket">▷</span>
-                            </button>
+                        <div class="nav-navigation-box">
+                            <div class="nav-tabs-holder">
+                                <button
+                                    class="skyrim-big-tab"
+                                    onClick={() => triggerMenuEvent("Journal")}
+                                >
+                                    {t("ui.tab_quests", "Quests")}
+                                </button>
 
-                            <button
-                                class="skyrim-big-tab"
-                                onClick={() => triggerMenuEvent("Pause")}
-                            >
-                                {t("ui.tab_system", "System")}
-                            </button>
+                                <button class="skyrim-big-tab active">
+                                    <span class="tab-bracket">◁</span> {t("ui.tab_stats_tracker", "Stats Tracker")} <span class="tab-bracket">▷</span>
+                                </button>
+
+                                <button
+                                    class="skyrim-big-tab"
+                                    onClick={() => triggerMenuEvent("Pause")}
+                                >
+                                    {t("ui.tab_system", "System")}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -440,6 +518,72 @@ function App() {
                                 <div class="skyrim-checkbox" onClick={() => setShowTooltips(!showTooltips())}>
                                     {showTooltips() ? '■' : '□'}
                                 </div>
+                            </div>
+
+                            <div class="settings-category-manager-container" style={{ "min-height": "auto", "margin-bottom": "1.2rem" }}>
+                                <h4 class="settings-section-title">{t("ui.typography_settings", "FONT SIZE CONFIGURATION")}</h4>
+                                <div class="settings-toggle-row" style={{ margin: "0 0 0.8rem 0", background: "transparent", border: "none", padding: "0" }}>
+                                    <span>{t("ui.auto_scale", "Use Automatic Screen Scaling:")}</span>
+                                    <div class="skyrim-checkbox" onClick={() => setAutoScale(!autoScale())}>
+                                        {autoScale() ? '■' : '□'}
+                                    </div>
+                                </div>
+                                <Show when={!autoScale()}>
+                                    {/* AJUSTE: Adicionado flex-shrink para manter a integridade visual da caixa */}
+                                    <div style={{ display: "flex", "flex-direction": "column", gap: "0.8rem", background: "#111", padding: "0.8rem", border: "1px solid #222", "flex-shrink": 0 }}>
+                                        <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center" }}>
+                                            <span>Base Menu Size (px):</span>
+                                            <input
+                                                type="text"
+                                                class="skyrim-search-input"
+                                                style={{ width: "5rem" }}
+                                                value={baseFontSize()}
+                                                onInput={(e) => {
+                                                    const val = e.currentTarget.value;
+                                                    if (val === "" || /^\d*$/.test(val)) setBaseFontSize(val);
+                                                }}
+                                                onBlur={(e) => {
+                                                    if (!e.currentTarget.value || Number(e.currentTarget.value) <= 0) setBaseFontSize(16);
+                                                    else setBaseFontSize(Number(e.currentTarget.value));
+                                                }}
+                                            />
+                                        </div>
+                                        <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center" }}>
+                                            <span>Main Titles (H2 - px):</span>
+                                            <input
+                                                type="text"
+                                                class="skyrim-search-input"
+                                                style={{ width: "5rem" }}
+                                                value={h2FontSize()}
+                                                onInput={(e) => {
+                                                    const val = e.currentTarget.value;
+                                                    if (val === "" || /^\d*$/.test(val)) setH2FontSize(val);
+                                                }}
+                                                onBlur={(e) => {
+                                                    if (!e.currentTarget.value || Number(e.currentTarget.value) <= 0) setH2FontSize(22);
+                                                    else setH2FontSize(Number(e.currentTarget.value));
+                                                }}
+                                            />
+                                        </div>
+                                        <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center" }}>
+                                            <span>Subtitles / Headers (H4 - px):</span>
+                                            <input
+                                                type="text"
+                                                class="skyrim-search-input"
+                                                style={{ width: "5rem" }}
+                                                value={h4FontSize()}
+                                                onInput={(e) => {
+                                                    const val = e.currentTarget.value;
+                                                    if (val === "" || /^\d*$/.test(val)) setH4FontSize(val);
+                                                }}
+                                                onBlur={(e) => {
+                                                    if (!e.currentTarget.value || Number(e.currentTarget.value) <= 0) setH4FontSize(15);
+                                                    else setH4FontSize(Number(e.currentTarget.value));
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                </Show>
                             </div>
 
                             <div class="settings-category-manager-container">
@@ -565,11 +709,6 @@ function App() {
                                 </For>
                             </div>
 
-                            <div class="settings-footer-actions">
-                                <button class="sl-action-btn footer-done-btn" onClick={saveAllChangesAndClose}>
-                                    {t("ui.done_btn", "Done")}
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </Portal>

@@ -31,7 +31,7 @@ void Prisma::Show() {
 
         view = PrismaUI->CreateView(path, [](PrismaView currentView) -> void {
             PrismaUI->RegisterJSListener(view, "hideWindow", [](const char* data) -> void {
-                PrismaUI->Hide(view);
+                Prisma::Hide();
                 });
 
             // ======= LISTENER: REQUISITAR DADOS DO STATS TRACKER =======
@@ -92,7 +92,7 @@ void Prisma::Show() {
                         }
                     }
 
-                    // NOVO: Garantir carregamento prévio e injetar o dicionário completo achatado para o Front
+                    //Garantir carregamento prévio e injetar o dicionário completo achatado para o Front
                     if (!LocalizationManager::IsLoaded) {
                         LocalizationManager::LoadLocalization();
                     }
@@ -195,3 +195,10 @@ void Prisma::Hide() {
 }
 
 bool Prisma::IsHidden() { return PrismaUI->IsHidden(view); }
+
+void Prisma::SendKeyPress(const std::string& key) {
+    if (PrismaUI && createdView && !PrismaUI->IsHidden(view)) {
+        std::string script = "window.dispatchEvent(new KeyboardEvent('keydown', { key: '" + key + "' }));";
+        PrismaUI->Invoke(view, script.c_str());
+    }
+}
