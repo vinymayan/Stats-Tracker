@@ -3,7 +3,6 @@
 #include "Prisma.h"
 
 namespace MenuHooks {
-    bool g_bypassSystemTabHook = false;
 
     RE::GFxValue alphaZero(0.0);
     RE::GFxValue alphaFull(100.0);
@@ -14,7 +13,6 @@ namespace MenuHooks {
             auto result = _ProcessMessage(a_this, a_message);
 
             if (a_message.type == RE::UI_MESSAGE_TYPE::kHide) {
-                g_bypassSystemTabHook = false;
                 Prisma::Hide();
             }
 
@@ -37,60 +35,13 @@ namespace MenuHooks {
 
                         // Aba 1 é a StatsTab
                         if (tabIndex == 1) {
-
-                            // Variável estática para impedir que o menu feche antes de terminar de abrir
-                            static bool isMCMFullyOpen = false;
-
-                            // --- NOVA LÓGICA DE CHECAGEM DO MCM (USANDO _ALPHA) ---
-                            if (g_bypassSystemTabHook) {
-                                RE::GFxValue configPanel;
-
-                                if (menuMc.GetMember("ConfigPanel", &configPanel) && configPanel.IsObject()) {
-                                    RE::GFxValue alphaVal;
-
-                                    // Puxa a opacidade do MCM (No ActionScript 2, vai de 0.0 a 100.0)
-                                    if (configPanel.GetMember("_alpha", &alphaVal) && alphaVal.IsNumber()) {
-                                        double currentAlpha = alphaVal.GetNumber();
-
-                                        // 1. Se a opacidade passou de 90, a animação de abertura terminou (ou está quase lá)
-                                        if (currentAlpha > 90.0) {
-                                            isMCMFullyOpen = true;
-                                        }
-
-                                        // 2. Se o MCM JÁ ESTAVA ABERTO, e agora a opacidade caiu para perto de 0, o jogador fechou!
-                                        if (isMCMFullyOpen && currentAlpha < 5.0) {
-                                            g_bypassSystemTabHook = false;
-                                            isMCMFullyOpen = false;
-                                        }
-                                    }
-                                }
-                            }
-                            else {
-                                // Garante que a flag seja resetada caso o menu inteiro seja fechado abruptamente
-                                isMCMFullyOpen = false;
+                            a_this->uiMovie->SetVariable("_root._alpha", alphaZero);
+                            if (Prisma::IsHidden()) {
+                                Prisma::Show();
                             }
 
-
-                            if (!g_bypassSystemTabHook) {
-                                a_this->uiMovie->SetVariable("_root._alpha", alphaZero);
-                                if (Prisma::IsHidden()) {
-                                    Prisma::Show();
-                                }
-                            }
-                            else {
-                                a_this->uiMovie->SetVariable("_root._alpha", alphaFull);
-                                if (!Prisma::IsHidden()) {
-                                    Prisma::Hide();
-                                }
-                            }
                         }
-                        else {
-                            // Outras abas (Quests, Stats) - Exibe o nativo e esconde o Prisma
-                            a_this->uiMovie->SetVariable("_root._alpha", alphaFull);
-                            if (!Prisma::IsHidden()) {
-                                Prisma::Hide();
-                            }
-                        }
+                        
                     }
                 }
             }

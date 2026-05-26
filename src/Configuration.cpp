@@ -139,28 +139,47 @@ namespace StatsTracker {
         file << buffer.GetString();
     }
 
-    // Callback para os Vanilla Stats
+    struct AsyncFetchState {
+        std::atomic<size_t> remaining{ 0 };
+        std::function<void()> completionCallback{ nullptr };
+    };
+
+    // Callback modificado para decrementar o contador compartilhado
     class GenericStatCallback : public RE::BSScript::IStackCallbackFunctor {
         std::string _statName;
+        std::shared_ptr<AsyncFetchState> _state;
     public:
-        GenericStatCallback(std::string a_statName) : _statName(a_statName) {}
+        GenericStatCallback(std::string a_statName, std::shared_ptr<AsyncFetchState> a_state)
+            : _statName(a_statName), _state(a_state) {
+        }
+
         virtual void operator()(RE::BSScript::Variable a_result) override {
             float val = 0.0f;
             if (a_result.IsInt()) val = static_cast<float>(a_result.GetSInt());
             else if (a_result.IsFloat()) val = a_result.GetFloat();
 
-            // Grava no nosso cache seguro (Use mutex se precisar dependendo do multithread da VM)
+            // Grava com segurança no cache estático
             StatsTracker::StatValuesCache[_statName] = val;
+
+            // Decrementa de forma atômica. Se atingir zero, todas as estatísticas vanilla responderam.
+            if (--(_state->remaining) == 0) {
+                if (_state->completionCallback) {
+                    _state->completionCallback();
+                }
+            }
         }
         virtual bool CanSave() const override { return false; }
         virtual void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object>&) override {}
     };
 
-    void FetchVanillaStatsAsync() {
+    // Agora a função aceita uma função de callback (lambda) executada ao terminar tudo
+    void FetchVanillaStatsAsync(std::function<void()> onComplete) {
         auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-        if (!vm) return;
+        if (!vm) {
+            if (onComplete) onComplete();
+            return;
+        }
 
-        // "Days Passed" removido desta lista para ser tratado como caso especial abaixo
         const std::vector<std::string> statsToTrack = {
             "Locations Discovered", "Dungeons Cleared", "Hours Slept",
             "Hours Waiting", "Standing Stones Found", "Gold Found", "Most Gold Carried",
@@ -192,52 +211,64 @@ namespace StatsTracker {
             "Winterhold Bounty"
         };
 
+        // Estado compartilhado dinamicamente entre as instâncias de callback
+        auto state = std::make_shared<AsyncFetchState>();
+        state->remaining = statsToTrack.size();
+
+        // Intercepta a finalização para rodar os dados síncronos e customizados antes de liberar para a UI
+        state->completionCallback = [onComplete]() {
+            // 1. Days Passed (via Calendar)
+            if (auto calendar = RE::Calendar::GetSingleton()) {
+                StatValuesCache["Days Passed"] = static_cast<float>(calendar->midnightsPassed);
+            }
+
+            // 2. Custom Rules (Globais e Graph Variables)
+            for (const auto& [id, rule] : RulesDB) {
+                if (rule.ruleType == TrackerRuleType::Global) {
+                    auto glob = RE::TESForm::LookupByID<RE::TESGlobal>(rule.attachedGlobID);
+                    if (glob) StatValuesCache[id] = glob->value;
+                }
+                else if (rule.ruleType == TrackerRuleType::GraphVariable) {
+                    auto player = RE::PlayerCharacter::GetSingleton();
+                    if (player && !rule.graphVarName.empty()) {
+                        float val = 0.0f;
+                        RE::BSFixedString varName(rule.graphVarName);
+
+                        if (rule.graphType == GraphVarType::Bool) {
+                            bool bVal = false;
+                            if (player->GetGraphVariableBool(varName, bVal)) val = bVal ? 1.0f : 0.0f;
+                        }
+                        else if (rule.graphType == GraphVarType::Int) {
+                            int iVal = 0;
+                            if (player->GetGraphVariableInt(varName, iVal)) val = static_cast<float>(iVal);
+                        }
+                        else if (rule.graphType == GraphVarType::Float) {
+                            float fVal = 0.0f;
+                            if (player->GetGraphVariableFloat(varName, fVal)) val = fVal;
+                        }
+                        StatValuesCache[id] = val;
+                    }
+                }
+            }
+
+            // Encaminha o aviso final para quem chamou
+            if (onComplete) onComplete();
+            };
+
+        size_t failures = 0;
         for (const auto& stat : statsToTrack) {
             auto args = RE::MakeFunctionArguments(RE::BSFixedString(stat));
-            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new GenericStatCallback(stat) };
-            vm->DispatchStaticCall("Game", "QueryStat", args, callback);
-        }
+            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{ new GenericStatCallback(stat, state) };
 
-        // 1. Days Passed (via Calendar)
-        if (auto calendar = RE::Calendar::GetSingleton()) {
-            StatValuesCache["Days Passed"] = static_cast<float>(calendar->midnightsPassed);
-        }
-
-
-        // Também pegamos o valor atual das nossas Custom Rules criadas na UI de SKSE
-        for (const auto& [id, rule] : RulesDB) {
-            if (rule.ruleType == TrackerRuleType::Global) {
-                auto glob = RE::TESForm::LookupByID<RE::TESGlobal>(rule.attachedGlobID);
-                if (glob) StatValuesCache[id] = glob->value;
+            // Se o envio falhar por algum motivo interno da engine, descontamos do contador para evitar deadlock
+            if (!vm->DispatchStaticCall("Game", "QueryStat", args, callback)) {
+                failures++;
             }
-            // Lógica para extrair os dados do grafo de animação do Player
-            else if (rule.ruleType == TrackerRuleType::GraphVariable) {
-                auto player = RE::PlayerCharacter::GetSingleton();
-                if (player && !rule.graphVarName.empty()) {
-                    float val = 0.0f;
-                    RE::BSFixedString varName(rule.graphVarName);
+        }
 
-                    if (rule.graphType == GraphVarType::Bool) {
-                        bool bVal = false;
-                        if (player->GetGraphVariableBool(varName, bVal)) {
-                            val = bVal ? 1.0f : 0.0f;
-                        }
-                    }
-                    else if (rule.graphType == GraphVarType::Int) {
-                        int iVal = 0;
-                        if (player->GetGraphVariableInt(varName, iVal)) {
-                            val = static_cast<float>(iVal);
-                        }
-                    }
-                    else if (rule.graphType == GraphVarType::Float) {
-                        float fVal = 0.0f;
-                        if (player->GetGraphVariableFloat(varName, fVal)) {
-                            val = fVal;
-                        }
-                    }
-
-                    StatValuesCache[id] = val;
-                }
+        if (failures > 0) {
+            if ((state->remaining -= failures) == 0) {
+                state->completionCallback();
             }
         }
     }

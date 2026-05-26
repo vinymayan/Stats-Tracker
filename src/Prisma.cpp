@@ -34,77 +34,78 @@ void Prisma::Show() {
                 Prisma::Hide();
                 });
 
-            // ======= LISTENER: REQUISITAR DADOS DO STATS TRACKER =======
+            // ======= LISTENER ATUALIZADO: REQUISITAR DADOS DO STATS TRACKER =======
             PrismaUI->RegisterJSListener(currentView, "RequestTrackedStats", [](const char* data) -> void {
-                StatsTracker::FetchVanillaStatsAsync();
 
-                SKSE::GetTaskInterface()->AddTask([]() {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+                // Dispara a busca passando o que deve acontecer ao finalizar de verdade
+                StatsTracker::FetchVanillaStatsAsync([]() {
 
-                    json payload = json::array();
+                    // Executa a montagem do JSON com segurança na fila de Tasks do SKSE
+                    SKSE::GetTaskInterface()->AddTask([]() {
+                        json payload = json::array();
 
-                    for (const auto& [statName, value] : StatsTracker::StatValuesCache) {
-                        if (StatsTracker::RulesDB.contains(statName)) continue;
+                        for (const auto& [statName, value] : StatsTracker::StatValuesCache) {
+                            if (StatsTracker::RulesDB.contains(statName)) continue;
 
-                        json item;
-                        item["id"] = statName;
-                        item["name"] = LocalizationManager::T("vanilla_stats." + statName, statName);
-                        item["desc"] = LocalizationManager::T("vanilla_stats_desc." + statName, "Skyrim Vanilla Stat");
-                        item["value"] = value;
-                        item["isCustomRule"] = false;
+                            json item;
+                            item["id"] = statName;
+                            item["name"] = LocalizationManager::T("vanilla_stats." + statName, statName);
+                            item["desc"] = LocalizationManager::T("vanilla_stats_desc." + statName, "Skyrim Vanilla Stat");
+                            item["value"] = value;
+                            item["isCustomRule"] = false;
 
-                        auto& opts = StatsTracker::UIOptions[statName];
-                        item["isActive"] = opts.isActive;
-                        item["category"] = opts.category.empty() ? "" : opts.category;
+                            auto& opts = StatsTracker::UIOptions[statName];
+                            item["isActive"] = opts.isActive;
+                            item["category"] = opts.category.empty() ? "" : opts.category;
 
-                        payload.push_back(item);
-                    }
-
-                    for (const auto& [id, rule] : StatsTracker::RulesDB) {
-                        json item;
-                        item["id"] = id;
-                        item["name"] = LocalizationManager::ResolveText(rule.name, false);
-                        item["desc"] = LocalizationManager::ResolveText(rule.description, false);
-                        item["value"] = StatsTracker::StatValuesCache[id];
-                        item["isCustomRule"] = true;
-
-                        auto& opts = StatsTracker::UIOptions[id];
-                        item["isActive"] = opts.isActive;
-
-                        std::string rawCat = opts.category.empty() ? (rule.category.empty() ? "General" : rule.category) : opts.category;
-                        item["category"] = rawCat;
-                        item["categoryRaw"] = rawCat;
-
-                        payload.push_back(item);
-                    }
-
-                    json response;
-                    response["stats"] = payload;
-                    response["customCategories"] = json::array();
-
-                    if (StatsTracker::UIOptions.contains("__CustomCategories__")) {
-                        std::string rawCats = StatsTracker::UIOptions["__CustomCategories__"].category;
-                        if (!rawCats.empty() && rawCats[0] == '[') {
-                            try {
-                                response["customCategories"] = json::parse(rawCats);
-                            }
-                            catch (...) {}
+                            payload.push_back(item);
                         }
-                    }
 
-                    //Garantir carregamento prévio e injetar o dicionário completo achatado para o Front
-                    if (!LocalizationManager::IsLoaded) {
-                        LocalizationManager::LoadLocalization();
-                    }
+                        for (const auto& [id, rule] : StatsTracker::RulesDB) {
+                            json item;
+                            item["id"] = id;
+                            item["name"] = LocalizationManager::ResolveText(rule.name, false);
+                            item["desc"] = LocalizationManager::ResolveText(rule.description, false);
+                            item["value"] = StatsTracker::StatValuesCache[id];
+                            item["isCustomRule"] = true;
 
-                    json locObj = json::object();
-                    for (const auto& [key, value] : LocalizationManager::LangCache) {
-                        locObj[key] = value;
-                    }
-                    response["localization"] = locObj;
+                            auto& opts = StatsTracker::UIOptions[id];
+                            item["isActive"] = opts.isActive;
 
-                    std::string script = "window.dispatchEvent(new CustomEvent('OnTrackedStatsReceived', { detail: " + response.dump() + " }));";
-                    PrismaUI->Invoke(view, script.c_str());
+                            std::string rawCat = opts.category.empty() ? (rule.category.empty() ? "General" : rule.category) : opts.category;
+                            item["category"] = rawCat;
+                            item["categoryRaw"] = rawCat;
+
+                            payload.push_back(item);
+                        }
+
+                        json response;
+                        response["stats"] = payload;
+                        response["customCategories"] = json::array();
+
+                        if (StatsTracker::UIOptions.contains("__CustomCategories__")) {
+                            std::string rawCats = StatsTracker::UIOptions["__CustomCategories__"].category;
+                            if (!rawCats.empty() && rawCats[0] == '[') {
+                                try {
+                                    response["customCategories"] = json::parse(rawCats);
+                                }
+                                catch (...) {}
+                            }
+                        }
+
+                        if (!LocalizationManager::IsLoaded) {
+                            LocalizationManager::LoadLocalization();
+                        }
+
+                        json locObj = json::object();
+                        for (const auto& [key, value] : LocalizationManager::LangCache) {
+                            locObj[key] = value;
+                        }
+                        response["localization"] = locObj;
+
+                        std::string script = "window.dispatchEvent(new CustomEvent('OnTrackedStatsReceived', { detail: " + response.dump() + " }));";
+                        PrismaUI->Invoke(view, script.c_str());
+                        });
                     });
                 });
 
@@ -149,20 +150,108 @@ void Prisma::Show() {
                            q->AddMessage(RE::JournalMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
                            
                        }
+                       SKSE::GetTaskInterface()->AddUITask([]() {
+                           auto ui = RE::UI::GetSingleton();
+                           auto journalName = RE::JournalMenu::MENU_NAME;
+
+                           auto applyGFxTab = []() {
+                               auto innerUI = RE::UI::GetSingleton();
+                               auto journal = innerUI ? innerUI->GetMenu<RE::JournalMenu>() : nullptr;
+                               logger::debug("Aplicando tabIndex via GFx... JournalMenu encontrado? {}", journal ? "Sim" : "Nao");
+                               if (journal) {
+                                   journal->uiMovie->SetVisible(true);
+                                 
+                                   RE::GFxValue menuMc;
+                                   if (journal->uiMovie->GetVariable(&menuMc, "_root.QuestJournalFader.Menu_mc")) {
+                                       logger::debug("Menu_mc encontrado. Invocando função para restaurar aba...");
+                                       // A) Restaura a aba desejada pelo ActionScript
+                                       RE::GFxValue args[2];
+                                       args[0].SetNumber(0);
+                                       args[1].SetBoolean(false);
+                                       menuMc.Invoke("RestoreSavedSettings", nullptr, args, 2);
+
+                                   }
+                               }
+                               };
+                           if (!ui->IsMenuOpen(journalName)) {
+                               // Se o JournalMenu estiver fechado, pedimos para a engine abrir...
+                               auto msgQueue = RE::UIMessageQueue::GetSingleton();
+                               if (msgQueue) {
+                                   msgQueue->AddMessage(journalName, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+                               }
+
+                               // ... e agendamos a invocação no GFxValue para o próximo ciclo
+                               SKSE::GetTaskInterface()->AddUITask(applyGFxTab);
+                           }
+                           else {
+                               // Como o menu já está aberto (escondido atrás do Prisma), aplica a aba imediatamente
+                               applyGFxTab();
+                           }
+
+                           });
                    }
                     else if (action == "Pause") {
-                       SKSE::GetTaskInterface()->AddUITask([]() {
-                           auto dispatcher = SKSE::GetModCallbackEventSource();
-                           if (dispatcher) {
-                               SKSE::ModCallbackEvent modEvent{
-                                   RE::BSFixedString("TPM_Open"),
-                                   nullptr,
-                                   0.0f,
-                                   nullptr
-                               };
-                               dispatcher->SendEvent(&modEvent);
+                       if(Prisma::TPM) {
+                           SKSE::GetTaskInterface()->AddUITask([]() {
+                               auto dispatcher = SKSE::GetModCallbackEventSource();
+                               if (dispatcher) {
+                                   SKSE::ModCallbackEvent modEvent{
+                                       RE::BSFixedString("TPM_Open"),
+                                       nullptr,
+                                       0.0f,
+                                       nullptr
+                                   };
+                                   dispatcher->SendEvent(&modEvent);
+                               }
+                               });
+					   }
+                       else {
+                           auto q = RE::UIMessageQueue::GetSingleton();
+                           if (q) {
+                               q->AddMessage(RE::JournalMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+
                            }
-                           });
+                           SKSE::GetTaskInterface()->AddUITask([]() {
+                               auto ui = RE::UI::GetSingleton();
+                               auto journalName = RE::JournalMenu::MENU_NAME;
+
+                               auto applyGFxTab = []() {
+                                   auto innerUI = RE::UI::GetSingleton();
+                                   auto journal = innerUI ? innerUI->GetMenu<RE::JournalMenu>() : nullptr;
+                                   logger::debug("Aplicando tabIndex via GFx... JournalMenu encontrado? {}", journal ? "Sim" : "Nao");
+                                   if (journal) {
+                                       journal->uiMovie->SetVisible(true);
+
+                                       RE::GFxValue menuMc;
+                                       if (journal->uiMovie->GetVariable(&menuMc, "_root.QuestJournalFader.Menu_mc")) {
+                                           logger::debug("Menu_mc encontrado. Invocando função para restaurar aba...");
+                                           // A) Restaura a aba desejada pelo ActionScript
+                                           RE::GFxValue args[2];
+                                           args[0].SetNumber(3);
+                                           args[1].SetBoolean(false);
+                                           menuMc.Invoke("RestoreSavedSettings", nullptr, args, 2);
+
+                                       }
+                                   }
+                                   };
+                               if (!ui->IsMenuOpen(journalName)) {
+                                   // Se o JournalMenu estiver fechado, pedimos para a engine abrir...
+                                   auto msgQueue = RE::UIMessageQueue::GetSingleton();
+                                   if (msgQueue) {
+                                       msgQueue->AddMessage(journalName, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+                                   }
+
+                                   // ... e agendamos a invocação no GFxValue para o próximo ciclo
+                                   SKSE::GetTaskInterface()->AddUITask(applyGFxTab);
+                               }
+                               else {
+                                   // Como o menu já está aberto (escondido atrás do Prisma), aplica a aba imediatamente
+                                   applyGFxTab();
+                               }
+
+                               });
+                       }
+                       
 				   }
                     
                 }

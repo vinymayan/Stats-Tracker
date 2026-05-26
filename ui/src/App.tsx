@@ -378,8 +378,8 @@ function App() {
                 <div class="skyrim-top-navigation">
                     {/* NOVO WRAPPER: Permite que os SVGs transbordem sem sofrer o corte do clip-path */}
                     <div class="nav-navigation-wrapper">
-                        <img src="/Assets/Side.svg" class="skyrim-nav-side left" alt="" />
-                        <img src="/Assets/Side.svg" class="skyrim-nav-side right" alt="" />
+                        <img src="./Assets/Side.svg" class="skyrim-nav-side left" alt="" />
+                        <img src="./Assets/Side.svg" class="skyrim-nav-side right" alt="" />
 
                         <div class="nav-navigation-box">
                             <div class="nav-tabs-holder">
@@ -406,10 +406,10 @@ function App() {
                 </div>
 
                 <div class="tracker-content-box">
-                    <img src="/Assets/Side.svg" class="skyrim-frame-corner tl" alt="" />
-                    <img src="/Assets/Side.svg" class="skyrim-frame-corner tr" alt="" />
-                    <img src="/Assets/Side.svg" class="skyrim-frame-corner bl" alt="" />
-                    <img src="/Assets/Side.svg" class="skyrim-frame-corner br" alt="" />
+                    <img src="./Assets/Side.svg" class="skyrim-frame-corner tl" alt="" />
+                    <img src="./Assets/Side.svg" class="skyrim-frame-corner tr" alt="" />
+                    <img src="./Assets/Side.svg" class="skyrim-frame-corner bl" alt="" />
+                    <img src="./Assets/Side.svg" class="skyrim-frame-corner br" alt="" />
 
                     <div class="tracker-filter-bar">
                         <div class="skyrim-custom-dropdown-container">

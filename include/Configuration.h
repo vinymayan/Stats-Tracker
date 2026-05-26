@@ -53,7 +53,7 @@ namespace StatsTracker {
 
     void LoadUISettings();
     void SaveUISettings();
-    void FetchVanillaStatsAsync();
+    void FetchVanillaStatsAsync(std::function<void()> onComplete);
 }
 
 namespace LocalizationManager {

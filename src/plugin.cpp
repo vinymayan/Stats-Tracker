@@ -11,7 +11,7 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
     if (message->type == SKSE::MessagingInterface::kPostLoad) {
         if (GetModuleHandleA("TweenPause.dll")) {
             Prisma::TPM = true;
-            logger::info("TweenPause.dll founded");
+            logger::info("TweenPause.dll founded.");
         }
         else {
             Prisma::TPM = false;
