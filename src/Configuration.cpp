@@ -194,11 +194,11 @@ namespace StatsTracker {
             "Civil War Quests Completed", "Daedric Quests Completed", "Dawnguard Quests Completed",
             "Dragonborn Quests Completed", "Questlines Completed", "People Killed",
             "Animals Killed", "Creatures Killed", "Undead Killed", "Daedra Killed",
-            "Automatons Killed", "Favorite Weapon", "Critical Strikes", "Sneak Attacks",
+            "Automatons Killed",  "Critical Strikes", "Sneak Attacks",
             "Backstabs", "Weapons Disarmed", "Brawls Won", "Bunnies Slaughtered",
-            "Spells Learned", "Favorite Spell", "Favorite School", "Dragon Souls Collected",
+            "Spells Learned", "Dragon Souls Collected",
             "Words Of Power Learned", "Words Of Power Unlocked", "Shouts Learned",
-            "Shouts Unlocked", "Shouts Mastered", "Times Shouted", "Favorite Shout",
+            "Shouts Unlocked", "Shouts Mastered", "Times Shouted", 
             "Soul Gems Used", "Souls Trapped", "Magic Items Made", "Weapons Improved",
             "Weapons Made", "Armor Improved", "Armor Made", "Potions Mixed",
             "Potions Used", "Poisons Mixed", "Poisons Used", "Ingredients Harvested",
@@ -209,6 +209,7 @@ namespace StatsTracker {
             "Falkreath Bounty", "Haafingar Bounty", "Hjaalmarch Bounty", "The Pale Bounty",
             "The Reach Bounty", "The Rift Bounty", "Tribal Orcs Bounty", "Whiterun Bounty",
             "Winterhold Bounty"
+            //"Favorite Shout","Favorite Weapon","Favorite School","Favorite Spell",
         };
 
         // Estado compartilhado dinamicamente entre as instâncias de callback
